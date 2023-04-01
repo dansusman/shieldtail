@@ -274,7 +274,7 @@ let test_does_run filename test_ctxt =
   let input = if Sys.file_exists infile then (string_of_file infile) else "" in
   let runner = if opts.valgrind then test_run_valgrind else test_run in
   let alloc_strat = opts.alloc_strat in
-  runner ~args:args ~std_input:input alloc_strat prog ("do_pass/" ^ filename) output test_ctxt
+  runner ~no_builtins:opts.no_builtins ~args:args ~std_input:input alloc_strat prog ("do_pass/" ^ filename) output test_ctxt
     ~cmp: (fun check result ->
       match check, result with
       | Ok(expect_msg), Ok(actual_message) -> String.exists actual_message expect_msg
