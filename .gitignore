@@ -1,0 +1,16 @@
+main
+test
+output/*.o
+output/*.run
+output/*.s
+output/*.dSYM
+output/*/*.o
+output/*/*.run
+output/*/*.s
+output/*/*.dSYM
+*.sw*
+*~
+*.log
+_build/*
+do_pass_lerner/
+do_err_lerner/
