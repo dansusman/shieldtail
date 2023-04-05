@@ -3,6 +3,7 @@ open Exprs
 open Errors
 open Pretty
 open Assembly
+open Graph
 
 type 'a name_envt = (string * 'a) list
 
@@ -27,7 +28,8 @@ type phase =
   | AddedNatives of sourcespan program
   | Tagged of tag program
   | ANFed of tag aprogram
-  | Located of tag aprogram * arg name_envt tag_envt
+  | FreeVarCached of (StringSet.t * tag) aprogram
+  | Located of (StringSet.t * tag) aprogram * arg name_envt tag_envt
   | Result of string
 
 (* These functions simply apply a phase constructor, because OCaml
@@ -47,6 +49,8 @@ let tagged p = Tagged p
 let anfed p = ANFed p
 
 let add_natives p = AddedNatives p
+
+let free_var_cached p = FreeVarCached p
 
 let locate_bindings (p, e) = Located (p, e)
 
@@ -116,6 +120,7 @@ let print_trace (trace : phase list) : string list =
     | AddedNatives _ -> "Natives Added"
     | Tagged _ -> "Tagged"
     | ANFed _ -> "ANF'ed"
+    | FreeVarCached _ -> "FreeVarCached"
     | Located _ -> "Located"
     | Result _ -> "Result"
   in
@@ -128,8 +133,9 @@ let print_trace (trace : phase list) : string list =
     | AddedNatives p -> string_of_program p
     | Tagged p -> string_of_program_with 1000 (fun tag -> sprintf "@%d" tag) p
     | ANFed p -> string_of_aprogram_with 1000 (fun tag -> sprintf "@%d" tag) p
+    | FreeVarCached p -> string_of_aprogram_with 1000 (fun (_, tag) -> sprintf "@%d" tag) p (* TODO maybe add prettier printing with actual FVs *)
     | Located (p, e) ->
-        string_of_aprogram_with 1000 (fun tag -> sprintf "@%d" tag) p
+        string_of_aprogram_with 1000 (fun (_, tag) -> sprintf "@%d" tag) p
         ^ "\nEnvs:\n"
         ^ ExtString.String.join "\n"
             (List.map

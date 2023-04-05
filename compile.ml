@@ -842,7 +842,7 @@ let anf (p : tag program) : unit aprogram =
   helpP p
 ;;
 
-let free_vars (e : 'a aexpr) : string list =
+let free_vars (e : 'a aexpr) : StringSet.t =
   let rec free_vars_C (e : 'a cexpr) (bound : StringSet.t) : StringSet.t =
     let free_vars_I_list (es : 'a immexpr list) (bound : StringSet.t) : StringSet.t =
       List.fold_left
@@ -907,13 +907,66 @@ let free_vars (e : 'a aexpr) : string list =
         StringSet.union values_free body_free
     | ACExpr c -> free_vars_C c bound
   in
-  StringSet.elements (free_vars_A e StringSet.empty)
+  free_vars_A e StringSet.empty
 ;;
 
 (* let get_fv_info (e : 'a cexpr) : StringSet.t = *)
 
 let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
-  raise (NotYetImplemented "TODO")
+  let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
+    match e with
+    | CIf (c, t, e, tag) ->
+        let c_free = free_vars_I c in
+        let t_free = free_vars_A t in
+        let e_free = free_vars_A e in
+        CIf (c_free, t_free, e_free, (free_vars e, tag))
+    | CPrim1 (p, op, tag) -> CPrim1 (p, free_vars_I op, (free_vars (ACExpr e), tag))
+    | CPrim2 (p, op1, op2, tag) ->
+        let op1_free = free_vars_I op1 in
+        let op2_free = free_vars_I op2 in
+        CPrim2 (p, op1_free, op2_free, (free_vars (ACExpr e), tag))
+    | CApp (f, args, Native, tag) -> CApp (free_vars_I f, List.map free_vars_I args, Native, (free_vars (ACExpr e), tag))
+    | CApp (func, args, ct, tag) ->
+        let func_free = free_vars_I func in
+        let args_free = List.map free_vars_I args in
+        CApp (func_free, args_free, ct, (free_vars (ACExpr e), tag))
+    | CTuple (els, tag) -> CTuple (List.map free_vars_I els, (free_vars (ACExpr e), tag))
+    | CGetItem (tup, idx, tag) ->
+        let tup_free = free_vars_I tup in
+        let idx_free = free_vars_I idx in
+        CGetItem (tup_free, idx_free, (free_vars (ACExpr e), tag))
+    | CSetItem (tup, idx, new_val, tag) ->
+        let tup_free = free_vars_I tup in
+        let idx_free = free_vars_I idx in
+        let new_val_free = free_vars_I new_val in
+        CSetItem (tup_free, idx_free, new_val_free, (free_vars (ACExpr e), tag))
+    | CLambda (args, body, tag) -> CLambda (args, free_vars_A body, (free_vars (ACExpr e), tag))
+    | CImmExpr i -> CImmExpr (free_vars_I i)
+  and free_vars_I (e : 'a immexpr) : (StringSet.t * 'a) immexpr =
+    match e with
+    | ImmNum (n, tag) -> ImmNum (n, (free_vars (ACExpr (CImmExpr e)), tag))
+    | ImmBool (b, tag) -> ImmBool (b, (free_vars (ACExpr (CImmExpr e)), tag))
+    | ImmNil tag -> ImmNil ((free_vars (ACExpr (CImmExpr e)), tag))
+    | ImmId (id, tag) -> ImmId (id, (free_vars (ACExpr (CImmExpr e)), tag))
+  and free_vars_A (e : 'a aexpr) : (StringSet.t * 'a) aexpr =
+    match e with
+    | ASeq (f, s, tag) ->
+        let f_free = free_vars_C f in
+        let s_free = free_vars_A s in
+        ASeq (f_free, s_free, (free_vars e, tag))
+    | ALet (name, value, body, tag) ->
+        let value_free = free_vars_C value in
+        let body_free = free_vars_A body in
+        ALet (name, value_free, body_free, (free_vars e, tag))
+    | ALetRec (binds, body, tag) ->
+        let names, values = List.split binds in
+        let values_free = List.map free_vars_C values in
+        let body_free = free_vars_A body in
+        ALetRec (List.combine names values_free, body_free, (free_vars e, tag))
+    | ACExpr c -> ACExpr (free_vars_C c)
+  in
+  match prog with
+  | AProgram (body, tag) -> AProgram (free_vars_A body, (free_vars body, tag))
 ;;
 
 (* let rec fvc_C (e : 'a cexpr) (bound : StringSet.t) : (StringSet.t * 'a) cexpr =
@@ -1012,9 +1065,9 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
 (* We decided to use a tag environment for the outer environment so that we don't have to
    change our implementation of ANF. Also, we think it's unlikely that we will want to
    insert any steps between allocation and compilation.*)
-let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg name_envt tag_envt =
+let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) : (StringSet.t * tag) aprogram * arg name_envt tag_envt =
   let allocate_name name si = (name, RegOffset (~-si * word_size, RBP)) in
-  let rec allocate_A (e : tag aexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
     match e with
     | ALet (name, value, body, _) ->
         let name_bind = (lambda_tag, [allocate_name name si]) in
@@ -1037,16 +1090,16 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg name_envt 
         let body_env, body_si = allocate_A body binds_si lambda_tag in
         (binds_env @ body_env, body_si)
     | ACExpr c -> allocate_C c si lambda_tag
-  and allocate_C (e : tag cexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
+  and allocate_C (e : (StringSet.t * tag) cexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
     match e with
     | CIf (_, t, e, _) ->
         let then_env, then_si = allocate_A t si lambda_tag in
         (* TODO come back and optimize this *)
         let else_env, else_si = allocate_A e then_si lambda_tag in
         (then_env @ else_env, max then_si else_si)
-    | CLambda (args, body, tag) ->
+    | CLambda (args, body, (fvs, tag)) ->
         let args_env = List.mapi (fun i a -> allocate_name a ~-(i + 3)) args in
-        let free = List.sort compare (free_vars (ACExpr e)) in
+        let free = List.sort compare (StringSet.elements fvs) in
         let free_env, free_si =
           List.fold_left
             (fun (prev_env, i) fv ->
@@ -1067,7 +1120,7 @@ let naive_stack_allocation (prog : tag aprogram) : tag aprogram * arg name_envt 
     | mapping :: rest -> mapping :: group_tags rest
   in
   match prog with
-  | AProgram (body, tag) ->
+  | AProgram (body, (_, tag)) ->
       let body_env, _ = allocate_A body 1 tag in
       let sorted_body_env =
         List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
@@ -1092,7 +1145,7 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   raise (NotYetImplemented "Implement graph coloring for racer")
 ;;
 
-let register_allocation (prog : tag aprogram) : tag aprogram * arg name_envt tag_envt =
+let register_allocation (prog : (StringSet.t * tag) aprogram) : (StringSet.t * tag) aprogram * arg name_envt tag_envt =
   raise (NotYetImplemented "Implement register allocation for racer")
 ;;
 
@@ -1161,7 +1214,7 @@ and reserve size tag =
 and compile_fun
     (name : string)
     (args : string list)
-    (body : tag aexpr)
+    (body : (StringSet.t * tag) aexpr)
     (initial_env : arg name_envt tag_envt)
     (tag : tag) =
   let space = deepest_stack (find initial_env tag) in
@@ -1175,7 +1228,7 @@ and compile_fun
   (setup, c_body, postlude)
 
 and compile_aexpr
-    (e : tag aexpr)
+    (e : (StringSet.t * tag) aexpr)
     (env : arg name_envt tag_envt)
     (lambda_tag : tag)
     (bound_lam_name : string) : instruction list =
@@ -1191,7 +1244,7 @@ and compile_aexpr
       let c_frs = compile_cexpr frs env lambda_tag bound_lam_name in
       let c_snd = compile_aexpr snd env lambda_tag bound_lam_name in
       c_frs @ c_snd
-  | ALetRec (binds, body, tag) ->
+  | ALetRec (binds, body, (_, tag)) ->
       let compiled_closures =
         List.concat_map
           (fun (name, lam) ->
@@ -1213,7 +1266,7 @@ and compile_aexpr
       @ compiled_body
 
 and compile_cexpr
-    (e : tag cexpr)
+    (e : (StringSet.t * tag) cexpr)
     (env : arg name_envt tag_envt)
     (lambda_tag : tag)
     (bound_lam_name : string) =
@@ -1241,7 +1294,7 @@ and compile_cexpr
   in
   let check_overflow = [IJo (Label "?err_overflow")] in
   match e with
-  | CPrim1 (op, e, tag) -> (
+  | CPrim1 (op, e, (_, tag)) -> (
       let e_reg = compile_imm e env lambda_tag in
       let predicate_prim1_instrs (label : string) (mask : int64) (tag : int64) : instruction list =
         [ (* Move answer to RAX *)
@@ -1283,7 +1336,7 @@ and compile_cexpr
               IXor (Reg RAX, Reg scratch_reg) ]
       | Print -> native_call (Label "?print") [e_reg]
       | PrintStack -> native_call (Label "?print_stack") [e_reg; Reg RSP; Reg RBP; Const (-1L)] )
-  | CPrim2 (op, left, right, tag) -> (
+  | CPrim2 (op, left, right, (_, tag)) -> (
       let c_left = compile_imm left env lambda_tag in
       let c_right = compile_imm right env lambda_tag in
       let predicate_prim2_instrs (label : string) (jmp_instr : instruction) : instruction list =
@@ -1352,7 +1405,7 @@ and compile_cexpr
             IMov (Reg scratch_reg, c_left);
             IJne (Label "?err_tuple_destructure_mismatch");
             IAdd (Reg RAX, Const tuple_tag) ] )
-  | CIf (cond, thn, els, tag) ->
+  | CIf (cond, thn, els, (_, tag)) ->
       let done_label = sprintf "done_%d" tag in
       let else_label = sprintf "if_false_%d" tag in
       let c_cond = compile_imm cond env lambda_tag in
@@ -1366,7 +1419,7 @@ and compile_cexpr
       @ c_thn
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
-  | CTuple (exprs, tag) ->
+  | CTuple (exprs, (_, tag)) ->
       (* TODO: change manual padding creation and total_size calculation to use align_size (test for regressions) *)
       let tup_size = List.length exprs in
       let store_length =
@@ -1442,7 +1495,7 @@ and compile_cexpr
       let f_imm = compile_imm func env lambda_tag in
       let c_args = List.map (fun a -> compile_imm a env lambda_tag) args in
       check_closure f_imm "?err_call_not_closure" @ call f_imm c_args
-  | CLambda (args, body, tag) ->
+  | CLambda (args, body, (fvs, tag)) ->
       let lam_label = sprintf "$lam_%d_start" tag in
       let lam_done_label = sprintf "$lam_%d_end" tag in
       let lam_env = find env tag in
@@ -1451,12 +1504,12 @@ and compile_cexpr
         (* TODO Lerner's code does not have recursive function name in free*)
         (* List.sort compare
            (free_vars (ALetRec ([(bound_lam_name, e)], ACExpr (CImmExpr (ImmNum (-1L, tag))), tag))) *)
-        List.sort compare (free_vars (ACExpr e))
+        List.sort compare (StringSet.elements fvs)
       in
       let num_frees = List.length frees in
-      let locals_space =
-        try deepest_stack body lam_env
-        with InternalCompilerError _ -> raise (InternalCompilerError "AHA3")
+      let locals_space = deepest_stack lam_env
+        (* try deepest_stack body lam_env
+        with InternalCompilerError _ -> raise (InternalCompilerError "AHA3") *)
       in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
@@ -1688,7 +1741,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
          (native_call (Label "?error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
   in
   match anfed with
-  | AProgram (body, tag) ->
+  | AProgram (body, (_, tag)) ->
       (* $heap and $size are mock parameter names, just so that compile_fun knows our_code_starts_here takes in 2 parameters *)
       let prologue, comp_main, epilogue =
         compile_fun "?our_code_starts_here" ["$heap"; "$size"] body env tag
@@ -1737,6 +1790,7 @@ let compile_to_string
   |> run_if (not no_builtins) (add_phase add_natives add_native_lambdas)
   |> add_phase desugared desugar |> add_phase tagged tag |> add_phase renamed rename_and_tag
   |> add_phase anfed (fun p -> atag (anf p))
+  |> add_phase free_var_cached free_vars_cache
   |> add_phase locate_bindings (pick_alloc_strategy alloc_strat)
   |> add_phase result compile_prog
 ;;
