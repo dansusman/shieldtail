@@ -257,7 +257,7 @@ void error(uint64_t code, SNAKEVAL val) {
   printHelp(stderr, val);
   fprintf(stderr, "\n");
   fflush(stderr);
-  naive_print_heap(HEAP, HEAP_END);
+  // naive_print_heap(HEAP, HEAP_END);
   fflush(stdout);
   free(HEAP);
   exit(code);

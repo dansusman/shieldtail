@@ -70,6 +70,12 @@ let err_CALL_NOT_CLOSURE = 14L
 
 let err_CALL_ARITY_ERR = 15L
 
+let err_GET_NOT_NUM = 16L
+
+let err_SET_NOT_NUM = 17L
+
+let err_TUPLE_DESTRUCTURE_MISMATCH = 18L
+
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -1160,7 +1166,7 @@ and compile_fun
     (tag : tag) =
   let space = deepest_stack (find initial_env tag) in
   let setup =
-    [ILabel name; IPush (Reg RBP); IMov (Reg RBP, Reg RSP); ILabel (name ^ "_body")]
+    [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
     @ (* ISub (Reg RSP, Const (Int64.of_int space))  *)
     replicate (IPush (Sized (QWORD_PTR, Const 0L))) ((space / word_size) + 1)
   in
@@ -1402,7 +1408,7 @@ and compile_cexpr
           IJl (Label "?err_get_low_index");
           ICmp (Reg scratch_reg, RegOffset (0, RAX));
           IJge (Label "?err_get_high_index");
-          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, word_size)) ]
+          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, 0)) ]
   | CSetItem (tup, idx, value, _) ->
       let c_tup = compile_imm tup env lambda_tag in
       let c_idx = compile_imm idx env lambda_tag in
@@ -1448,7 +1454,10 @@ and compile_cexpr
         List.sort compare (free_vars (ACExpr e))
       in
       let num_frees = List.length frees in
-      let locals_space = deepest_stack lam_env in
+      let locals_space =
+        try deepest_stack body lam_env
+        with InternalCompilerError _ -> raise (InternalCompilerError "AHA3")
+      in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
       let lambda_body =
@@ -1654,7 +1663,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_set_low_index:%s\n\
        ?err_set_high_index:%s\n\
        ?err_call_not_closure:%s\n\
-       ?err_call_arity_err:%s\n"
+       ?err_call_arity_err:%s\n\
+       ?err_get_not_num:%s\n\
+       ?err_set_not_num:%s\n\
+       ?err_tuple_destructure_mismatch:%s\n"
       (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
@@ -1670,6 +1682,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm (native_call (Label "?error") [Const err_SET_HIGH_INDEX; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_CALL_NOT_CLOSURE; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_CALL_ARITY_ERR; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_GET_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_SET_NOT_NUM; Reg scratch_reg]))
+      (to_asm
+         (native_call (Label "?error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
   in
   match anfed with
   | AProgram (body, tag) ->

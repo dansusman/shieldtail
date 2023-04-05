@@ -11,7 +11,7 @@
     heap: the starting address of the heap
     heap_end: the first address after the heap
  */
-uint64_t* naive_print_heap(uint64_t* heap, uint64_t* heap_end) asm("?naive_print_heap");
+void naive_print_heap(uint64_t* heap, uint64_t* heap_end) asm("?naive_print_heap");
 
 // IMPLEMENT THE FUNCTIONS BELOW
 
@@ -25,7 +25,7 @@ uint64_t* naive_print_heap(uint64_t* heap, uint64_t* heap_end) asm("?naive_print
     to_start: the starting address (inclusive) of the to-space of the heap
     to_end: the ending address (exclusive) of the to-space of the heap
  */
-uint64_t* smarter_print_heap(uint64_t* from_start, uint64_t* from_end, uint64_t* to_start, uint64_t* to_end);
+void smarter_print_heap(uint64_t* from_start, uint64_t* from_end, uint64_t* to_start, uint64_t* to_end);
 
 /*
   Copies a Racer value from the given address to the new heap, 
