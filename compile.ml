@@ -910,7 +910,24 @@ let free_vars (e : 'a aexpr) : StringSet.t =
   free_vars_A e StringSet.empty
 ;;
 
-(* let get_fv_info (e : 'a cexpr) : StringSet.t = *)
+let get_fv_info (e : 'a aexpr) : StringSet.t =
+  match e with
+  | ASeq (_, _, (fvs, _)) | ALet (_, _, _, (fvs, _)) | ALetRec (_, _, (fvs, _)) -> fvs
+  | ACExpr c -> (
+    match c with
+    | CIf (_, _, _, (fvs, _))
+     |CLambda (_, _, (fvs, _))
+     |CPrim1 (_, _, (fvs, _))
+     |CPrim2 (_, _, _, (fvs, _))
+     |CApp (_, _, _, (fvs, _))
+     |CTuple (_, (fvs, _))
+     |CGetItem (_, _, (fvs, _))
+     |CSetItem (_, _, _, (fvs, _)) -> fvs
+    | CImmExpr i -> (
+      match i with
+      | ImmBool (_, (fvs, _)) | ImmNil (fvs, _) | ImmNum (_, (fvs, _)) | ImmId (_, (fvs, _)) -> fvs
+      ) )
+;;
 
 let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
   let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
@@ -925,7 +942,8 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
         let op1_free = free_vars_I op1 in
         let op2_free = free_vars_I op2 in
         CPrim2 (p, op1_free, op2_free, (free_vars (ACExpr e), tag))
-    | CApp (f, args, Native, tag) -> CApp (free_vars_I f, List.map free_vars_I args, Native, (free_vars (ACExpr e), tag))
+    | CApp (f, args, Native, tag) ->
+        CApp (free_vars_I f, List.map free_vars_I args, Native, (free_vars (ACExpr e), tag))
     | CApp (func, args, ct, tag) ->
         let func_free = free_vars_I func in
         let args_free = List.map free_vars_I args in
@@ -946,7 +964,7 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
     match e with
     | ImmNum (n, tag) -> ImmNum (n, (free_vars (ACExpr (CImmExpr e)), tag))
     | ImmBool (b, tag) -> ImmBool (b, (free_vars (ACExpr (CImmExpr e)), tag))
-    | ImmNil tag -> ImmNil ((free_vars (ACExpr (CImmExpr e)), tag))
+    | ImmNil tag -> ImmNil (free_vars (ACExpr (CImmExpr e)), tag)
     | ImmId (id, tag) -> ImmId (id, (free_vars (ACExpr (CImmExpr e)), tag))
   and free_vars_A (e : 'a aexpr) : (StringSet.t * 'a) aexpr =
     match e with
@@ -1065,9 +1083,11 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
 (* We decided to use a tag environment for the outer environment so that we don't have to
    change our implementation of ANF. Also, we think it's unlikely that we will want to
    insert any steps between allocation and compilation.*)
-let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) : (StringSet.t * tag) aprogram * arg name_envt tag_envt =
+let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) :
+    (StringSet.t * tag) aprogram * arg name_envt tag_envt =
   let allocate_name name si = (name, RegOffset (~-si * word_size, RBP)) in
-  let rec allocate_A (e : (StringSet.t * tag) aexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (si : int) (lambda_tag : tag) :
+      arg name_envt tag_envt * int =
     match e with
     | ALet (name, value, body, _) ->
         let name_bind = (lambda_tag, [allocate_name name si]) in
@@ -1090,7 +1110,8 @@ let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) : (StringSet.t 
         let body_env, body_si = allocate_A body binds_si lambda_tag in
         (binds_env @ body_env, body_si)
     | ACExpr c -> allocate_C c si lambda_tag
-  and allocate_C (e : (StringSet.t * tag) cexpr) (si : int) (lambda_tag : tag) : arg name_envt tag_envt * int =
+  and allocate_C (e : (StringSet.t * tag) cexpr) (si : int) (lambda_tag : tag) :
+      arg name_envt tag_envt * int =
     match e with
     | CIf (_, t, e, _) ->
         let then_env, then_si = allocate_A t si lambda_tag in
@@ -1132,11 +1153,18 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht 
   let rec help_C (c_e : (StringSet.t * tag) cexpr) : grapht =
     match c_e with
     | CIf (c, t, e, (fvs, _)) -> merge_two (interfere t live) (interfere e live)
+    | CLambda _ -> raise (NotYetImplemented "TODO")
     | _ -> Graph.empty
   in
   match e with
   | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live)
-  | ALet (name, bound, body, (fvs, _)) -> raise (NotYetImplemented "TODO")
+  | ALet (name, bound, body, (fvs, _)) ->
+      let body_free = StringSet.elements fvs in
+      let bound_interfere = help_C bound in
+      let new_graph =
+        List.fold_right (fun fv prev_graph -> add_edge prev_graph name fv) body_free bound_interfere
+      in
+      merge_two new_graph (interfere body (StringSet.add name live))
   | ALetRec (binds, body, (fvs, _)) -> raise (NotYetImplemented "TODO")
   | ACExpr c_e -> help_C c_e
 ;;
@@ -1145,8 +1173,70 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   raise (NotYetImplemented "Implement graph coloring for racer")
 ;;
 
-let register_allocation (prog : (StringSet.t * tag) aprogram) : (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-  raise (NotYetImplemented "Implement register allocation for racer")
+let register_allocation (prog : (StringSet.t * tag) aprogram) :
+    (StringSet.t * tag) aprogram * arg name_envt tag_envt =
+  let allocate_name name si = (name, RegOffset (~-si * word_size, RBP)) in
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (si : int) (lambda_tag : tag) :
+      arg name_envt tag_envt * int =
+    match e with
+    | ALet (name, value, body, _) ->
+        let name_bind = (lambda_tag, [allocate_name name si]) in
+        let value_env, value_si = allocate_C value (si + 1) lambda_tag in
+        let body_env, body_si = allocate_A body (si + 1) lambda_tag in
+        ((name_bind :: value_env) @ body_env, max value_si body_si)
+    | ASeq (f, s, _) ->
+        let f_env, f_si = allocate_C f si lambda_tag in
+        let s_env, s_si = allocate_A s si lambda_tag in
+        (f_env @ s_env, max f_si s_si)
+    | ALetRec (binds, body, _) ->
+        let binds_env, binds_si =
+          List.fold_left
+            (fun (prev_env, prev_si) (name, value) ->
+              let name_bind = (lambda_tag, [allocate_name name prev_si]) in
+              let value_env, _ = allocate_C value (prev_si + 1) lambda_tag in
+              ((name_bind :: value_env) @ prev_env, prev_si + 1) )
+            ([], si) binds
+        in
+        let body_env, body_si = allocate_A body binds_si lambda_tag in
+        (binds_env @ body_env, body_si)
+    | ACExpr c -> allocate_C c si lambda_tag
+  and allocate_C (e : (StringSet.t * tag) cexpr) (si : int) (lambda_tag : tag) :
+      arg name_envt tag_envt * int =
+    match e with
+    | CIf (_, t, e, _) ->
+        let then_env, then_si = allocate_A t si lambda_tag in
+        (* TODO come back and optimize this *)
+        let else_env, else_si = allocate_A e then_si lambda_tag in
+        (then_env @ else_env, max then_si else_si)
+    | CLambda (args, body, (fvs, tag)) ->
+        let args_env = List.mapi (fun i a -> allocate_name a ~-(i + 3)) args in
+        let free = List.sort compare (StringSet.elements fvs) in
+        let free_env, free_si =
+          List.fold_left
+            (fun (prev_env, i) fv ->
+              let current = allocate_name fv i in
+              (current :: prev_env, i + 1) )
+            ([], 1) free
+        in
+        let body_env, body_si = allocate_A body free_si tag in
+        ((tag, args_env @ free_env) :: body_env, body_si)
+    | _ -> ([], si)
+  in
+  let rec group_tags (env : arg name_envt tag_envt) : arg name_envt tag_envt =
+    match env with
+    | [] -> []
+    | [x] -> [x]
+    | (tag1, inner_env1) :: (tag2, inner_env2) :: rest when tag1 = tag2 ->
+        group_tags ((tag1, inner_env1 @ inner_env2) :: rest)
+    | mapping :: rest -> mapping :: group_tags rest
+  in
+  match prog with
+  | AProgram (body, (_, tag)) ->
+      let body_env, _ = allocate_A body 1 tag in
+      let sorted_body_env =
+        List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
+      in
+      (prog, group_tags sorted_body_env)
 ;;
 
 (* Returns the stack-index of the deepest stack index used for any
@@ -1478,6 +1568,7 @@ and compile_cexpr
           IJge (Label "?err_set_high_index");
           IInstrComment
             ( IPush (Reg R10),
+              (* TODO R10 might be clobbered by register allocation! *)
               "saving R10 to the stack - we need to use it as a temp for the following mov" );
           IMov (Reg R10, c_val);
           IMov (Sized (QWORD_PTR, RegOffsetReg (RAX, scratch_reg, word_size, word_size)), Reg R10);
@@ -1507,9 +1598,10 @@ and compile_cexpr
         List.sort compare (StringSet.elements fvs)
       in
       let num_frees = List.length frees in
-      let locals_space = deepest_stack lam_env
+      let locals_space =
+        deepest_stack lam_env
         (* try deepest_stack body lam_env
-        with InternalCompilerError _ -> raise (InternalCompilerError "AHA3") *)
+           with InternalCompilerError _ -> raise (InternalCompilerError "AHA3") *)
       in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
