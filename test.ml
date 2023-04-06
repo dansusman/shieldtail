@@ -164,12 +164,94 @@ let interfere =
       [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])] ]
 ;;
 
-
 let remove_node =
   [ t_graph "r1"
-      (remove_node (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])]) "z")
+      (remove_node
+         (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])])
+         "z" )
       [("x", ["y"]); ("y", ["x"])] ]
 ;;
+
+let color_graph =
+  [ t_any "color1" (color_graph (graph_from_assoc_list [("x", [])]) []) [("x", Reg R10)];
+    t_any "color2_non_interfering"
+      (color_graph (graph_from_assoc_list [("x", []); ("y", [])]) [])
+      [("x", Reg R10); ("y", Reg R10)];
+    t_any "color2_interfering"
+      (color_graph (graph_from_assoc_list [("x", ["y"]); ("y", ["x"])]) [])
+      [("x", Reg R12); ("y", Reg R10)];
+    t_any "color3_all_interfere"
+      (color_graph
+         (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])])
+         [] )
+      [("x", Reg R13); ("y", Reg R12); ("z", Reg R10)];
+    t_any "color3_2_interfere"
+      (color_graph (graph_from_assoc_list [("x", []); ("z", ["y"]); ("y", ["z"])]) [])
+      [("x", Reg R10); ("y", Reg R12); ("z", Reg R10)];
+    t_any "color3_indirect_interfere"
+      (color_graph (graph_from_assoc_list [("x", ["y"]); ("z", ["y"]); ("y", ["x"; "z"])]) [])
+      [("x", Reg R10); ("y", Reg R12); ("z", Reg R10)];
+    t_any "color_12_non_interfering"
+      (color_graph
+         (graph_from_assoc_list
+            [ ("a", []);
+              ("b", []);
+              ("c", []);
+              ("d", []);
+              ("e", []);
+              ("f", []);
+              ("g", []);
+              ("h", []);
+              ("i", []);
+              ("j", []);
+              ("k", []);
+              ("l", []) ] )
+         [] )
+      [ ("a", Reg R10);
+        ("b", Reg R10);
+        ("c", Reg R10);
+        ("d", Reg R10);
+        ("e", Reg R10);
+        ("f", Reg R10);
+        ("g", Reg R10);
+        ("h", Reg R10);
+        ("i", Reg R10);
+        ("j", Reg R10);
+        ("k", Reg R10);
+        ("l", Reg R10) ];
+    t_any "color_12_non_interfering"
+      (color_graph
+         (graph_from_assoc_list
+            [ ("z", ["a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("a", ["z"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("b", ["z"; "a"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("c", ["z"; "a"; "b"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("d", ["z"; "a"; "b"; "c"; "e"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("e", ["z"; "a"; "b"; "c"; "d"; "f"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("f", ["z"; "a"; "b"; "c"; "d"; "e"; "g"; "h"; "i"; "j"; "k"; "l"]);
+              ("g", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "h"; "i"; "j"; "k"; "l"]);
+              ("h", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "g"; "i"; "j"; "k"; "l"]);
+              ("i", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "j"; "k"; "l"]);
+              ("j", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "k"; "l"]);
+              ("k", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "l"]);
+              ("l", ["z"; "a"; "b"; "c"; "d"; "e"; "f"; "g"; "h"; "i"; "j"; "k"]) ] )
+         [] )
+      [ ("a", RegOffset (~-16, RBP));
+        ("b", RegOffset (~-8, RBP));
+        ("c", Reg R9);
+        ("d", Reg R8);
+        ("e", Reg RDX);
+        ("f", Reg RCX);
+        ("g", Reg RDI);
+        ("h", Reg RSI);
+        ("i", Reg RBX);
+        ("j", Reg R14);
+        ("k", Reg R13);
+        ("l", Reg R12);
+        ("z", Reg R10); ] ]
+;;
+
+(* TODO bunch of vars *)
 
 let pair_tests =
   [ t "tup1"
@@ -214,6 +296,6 @@ let gc =
 
 let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
-let suite = "unit_tests" >::: remove_node
+let suite = "unit_tests" >::: color_graph
 
 let () = run_test_tt_main ("all_tests" >::: [suite])

@@ -1207,7 +1207,7 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   in
   let rec color_help (worklist : string list) (colored : arg name_envt) : arg name_envt =
     match worklist with
-    | [] -> []
+    | [] -> colored
     | node_name :: rest ->
         let currently_used_colors =
           List.concat_map
