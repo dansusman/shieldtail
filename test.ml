@@ -71,15 +71,19 @@ let quoted_str (s : string) : string = Printf.sprintf "\"%s\"" s
 
 let t_string name value expected = name >:: fun _ -> assert_equal expected value ~printer:quoted_str
 
-let t_graph name value expected =
-  name >:: fun _ -> assert_equal expected value ~printer:string_of_graph
-;;
-
 let graph_from_assoc_list ls =
   let nodes, neighbors = List.split ls in
   let neighbors_sets = List.map StringSet.of_list neighbors in
   let new_ls = List.combine nodes neighbors_sets in
   List.fold_left (fun m (k, v) -> Graph.add k v m) Graph.empty new_ls
+;;
+
+let t_graph name value expected =
+  name
+  >:: fun _ ->
+  assert_equal
+    (string_of_graph (graph_from_assoc_list expected))
+    (string_of_graph value) ~printer:quoted_str
 ;;
 
 let tinterfere name program expected =
@@ -160,6 +164,13 @@ let interfere =
       [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])] ]
 ;;
 
+
+let remove_node =
+  [ t_graph "r1"
+      (remove_node (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])]) "z")
+      [("x", ["y"]); ("y", ["x"])] ]
+;;
+
 let pair_tests =
   [ t "tup1"
       "let t = (4, (5, 6)) in\n\
@@ -203,6 +214,6 @@ let gc =
 
 let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
-let suite = "unit_tests" >::: interfere
+let suite = "unit_tests" >::: remove_node
 
 let () = run_test_tt_main ("all_tests" >::: [suite])

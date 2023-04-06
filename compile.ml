@@ -1170,7 +1170,57 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht 
 ;;
 
 let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
-  raise (NotYetImplemented "Implement graph coloring for racer")
+  let get_min_color (used : arg list) : arg =
+    (* TODO make sure to push and pop native call regs if needed *)
+    (* NOTE: excluding R11 because it's our scratch_reg *)
+    let reg_priority =
+      List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
+    in
+    let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
+      match reg_priority with
+      | [] ->
+          let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
+          if List.mem curr_height_offset used then
+            min_color_help reg_priority (stack_height + 1)
+          else
+            curr_height_offset
+      | to_try :: rest ->
+          if List.mem to_try used then
+            min_color_help rest stack_height
+          else
+            to_try
+    in
+    min_color_help reg_priority 1
+  in
+  let rec initialize_worklist (g : grapht) (worklist : string list) : string list =
+    if Graph.is_empty g then
+      worklist
+    else
+      let sorted_bindings =
+        List.sort
+          (fun (_, neighbors1) (_, neighbors2) ->
+            StringSet.cardinal neighbors1 - StringSet.cardinal neighbors2 )
+          (Graph.bindings g)
+      in
+      let smallest_binding_name, _ = List.hd sorted_bindings in
+      initialize_worklist (remove_node g smallest_binding_name) (smallest_binding_name :: worklist)
+  in
+  let rec color_help (worklist : string list) (colored : arg name_envt) : arg name_envt =
+    match worklist with
+    | [] -> []
+    | node_name :: rest ->
+        let currently_used_colors =
+          List.concat_map
+            (fun neighbor ->
+              match find_opt colored neighbor with
+              | None -> []
+              | Some arg -> [arg] )
+            (get_neighbors g node_name)
+        in
+        let reg_to_use = get_min_color currently_used_colors in
+        color_help rest ((node_name, reg_to_use) :: colored)
+  in
+  color_help (initialize_worklist g []) init_env
 ;;
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
@@ -1568,7 +1618,6 @@ and compile_cexpr
           IJge (Label "?err_set_high_index");
           IInstrComment
             ( IPush (Reg R10),
-              (* TODO R10 might be clobbered by register allocation! *)
               "saving R10 to the stack - we need to use it as a temp for the following mov" );
           IMov (Reg R10, c_val);
           IMov (Sized (QWORD_PTR, RegOffsetReg (RAX, scratch_reg, word_size, word_size)), Reg R10);

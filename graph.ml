@@ -42,9 +42,21 @@ let get_neighbors (g : grapht) (name : string) : string list =
     []
 ;;
 
+let remove_neighbor (g : grapht) (from : string) (neighbor : string) : grapht =
+  let new_neighbors = List.filter (fun n -> n != neighbor) (get_neighbors g from) in
+  let new_neighbors_set = StringSet.of_list new_neighbors in
+  Graph.add from new_neighbors_set (Graph.remove from g)
+;;
+
 let get_vertices (g : grapht) : string list =
   let keys, _ = List.split (Graph.bindings g) in
   keys
+;;
+
+let remove_node (g : grapht) (name : string) : grapht =
+  List.fold_right
+    (fun neighbor prev_graph -> remove_neighbor prev_graph neighbor name)
+    (get_neighbors g name) (Graph.remove name g)
 ;;
 
 let string_of_graph (g : grapht) : string =
