@@ -987,99 +987,6 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
   | AProgram (body, tag) -> AProgram (free_vars_A body, (free_vars body, tag))
 ;;
 
-(* let rec fvc_C (e : 'a cexpr) (bound : StringSet.t) : (StringSet.t * 'a) cexpr =
-       let free_vars_I_list (es : 'a immexpr list) (bound : StringSet.t) : StringSet.t =
-         List.fold_left
-           (fun free curr -> StringSet.union free (free_vars_I curr bound))
-           StringSet.empty es
-       in
-       match e with
-       | CIf (c, t, e, _) ->
-           let c_free = free_vars_I c bound in
-           let t_free = free_vars_A t bound in
-           let e_free = free_vars_A e bound in
-           StringSet.union (StringSet.union c_free t_free) e_free
-       | CPrim1 (_, op, _) -> free_vars_I op bound
-       | CPrim2 (_, op1, op2, _) ->
-           let op1_free = free_vars_I op1 bound in
-           let op2_free = free_vars_I op2 bound in
-           StringSet.union op1_free op2_free
-       | CApp (_, args, Native, _) -> free_vars_I_list args bound
-       | CApp (func, args, _, _) ->
-           let func_free = free_vars_I func bound in
-           let args_free = free_vars_I_list args bound in
-           StringSet.union func_free args_free
-       | CTuple (els, _) -> free_vars_I_list els bound
-       | CGetItem (tup, idx, _) ->
-           let tup_free = free_vars_I tup bound in
-           let idx_free = free_vars_I idx bound in
-           StringSet.union tup_free idx_free
-       | CSetItem (tup, idx, new_val, _) ->
-           let tup_free = free_vars_I tup bound in
-           let idx_free = free_vars_I idx bound in
-           let new_val_free = free_vars_I new_val bound in
-           StringSet.union (StringSet.union tup_free idx_free) new_val_free
-       | CLambda (args, body, _) -> free_vars_A body (StringSet.union (StringSet.of_list args) bound)
-       | CImmExpr i -> free_vars_I i bound
-     and fvc_I (e : 'a immexpr) (bound : StringSet.t) : (StringSet.t * 'a) immexpr =
-       match e with
-       | ImmNum _ | ImmBool _ | ImmNil _ -> StringSet.empty
-       | ImmId (id, _) -> (
-         match StringSet.find_opt id bound with
-         | Some _ -> StringSet.empty
-         | None -> StringSet.singleton id )
-     and fvc_A (e : 'a aexpr) (bound : StringSet.t) : (StringSet.t * 'a) aexpr =
-       let free_vars_C_list (es : 'a cexpr list) (bound : StringSet.t) : StringSet.t =
-         List.fold_left
-           (fun free curr -> StringSet.union free (free_vars_C curr bound))
-           StringSet.empty es
-       in
-       match e with
-       | ASeq (f, s, tag) ->
-           let f_free = fvc_C f bound in
-           let s_free = fvc_A s bound in
-           ASeq (f_free, s_free, ((StringSet.union (get_fv_info f_free) (get_fv_info s_free)), tag))
-       | ALet (name, value, body, _) ->
-           let value_free = free_vars_C value bound in
-           let body_free = free_vars_A body (StringSet.add name bound) in
-           StringSet.union value_free body_free
-       | ALetRec (binds, body, _) ->
-           let names, values = List.split binds in
-           let new_bound = StringSet.union (StringSet.of_list names) bound in
-           let values_free = free_vars_C_list values new_bound in
-           let body_free = free_vars_A body new_bound in
-           StringSet.union values_free body_free
-       | ACExpr c -> free_vars_C c bound
-     in
-     match prog with
-     | AProgram (body, tag) ->
-         let body_ans = fvc_A body StringSet.empty in
-         AProgram (body_ans, tag)
-   ;; *)
-
-(* let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
-     match prog with
-     | AProgram (body, tag) ->
-         let body_ans = fvc_A body StringSet.empty in
-         AProgram (body_ans, tag)
-
-   and fvc_A (a_e : 'a aexpr) (env : StringSet.t) : (StringSet.t * 'a) aexpr =
-     match a_e with
-     | ASeq (f, s, tag) ->
-         let f_ans = fvc_C f env in
-         let s_ans = fvc_C s env in
-         ASeq (f_ans, s_ans, (StringSet.union (free_vars f) (free_vars s), tag))
-     | ACExpr c_e -> ACExpr (fvc_C c_e env)
-     | ALet (name, bound, body, tag) ->
-         let bound_ans = fvc_C bound env in
-         let new_env = StringSet.add name env in
-         let body_ans = fvc_A body env in
-         let body_fvs = some_helper body new_env in
-         ALet (name, bound_ans, body_ans, ((StringSet.union (...) body_fvs), tag))
-     | ALetRec (binds, body, tag) -> a_e
-
-   and fvc_C (c_e : 'a cexpr) (env : StringSet.t) : (StringSet.t * 'a) cexpr = c_e *)
-
 (* We decided to use a tag environment for the outer environment so that we don't have to
    change our implementation of ANF. Also, we think it's unlikely that we will want to
    insert any steps between allocation and compilation.*)
@@ -1159,39 +1066,44 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht 
   match e with
   | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live)
   | ALet (name, bound, body, (fvs, _)) ->
-      let body_free = StringSet.elements fvs in
-      let bound_interfere = help_C bound in
+      let body_free = StringSet.elements (get_fv_info body) in
+      (* let bound_interfere = help_C bound in *)
       let new_graph =
-        List.fold_right (fun fv prev_graph -> add_edge prev_graph name fv) body_free bound_interfere
+        List.fold_right
+          (fun fv prev_graph -> add_edge prev_graph name fv)
+          body_free
+          (* every bound name should be added as a node so a register is given to it *)
+          (Graph.singleton name StringSet.empty)
       in
       merge_two new_graph (interfere body (StringSet.add name live))
   | ALetRec (binds, body, (fvs, _)) -> raise (NotYetImplemented "TODO")
   | ACExpr c_e -> help_C c_e
 ;;
 
-let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
-  let get_min_color (used : arg list) : arg =
-    (* TODO make sure to push and pop native call regs if needed *)
-    (* NOTE: excluding R11 because it's our scratch_reg *)
-    let reg_priority =
-      List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
-    in
-    let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
-      match reg_priority with
-      | [] ->
-          let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
-          if List.mem curr_height_offset used then
-            min_color_help reg_priority (stack_height + 1)
-          else
-            curr_height_offset
-      | to_try :: rest ->
-          if List.mem to_try used then
-            min_color_help rest stack_height
-          else
-            to_try
-    in
-    min_color_help reg_priority 1
+let min_unused_reg (used : arg list) : arg =
+  (* TODO make sure to push and pop native call regs if needed *)
+  (* NOTE: excluding R11 because it's our scratch_reg *)
+  let reg_priority =
+    List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
   in
+  let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
+    match reg_priority with
+    | [] ->
+        let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
+        if List.mem curr_height_offset used then
+          min_color_help reg_priority (stack_height + 1)
+        else
+          curr_height_offset
+    | to_try :: rest ->
+        if List.mem to_try used then
+          min_color_help rest stack_height
+        else
+          to_try
+  in
+  min_color_help reg_priority 1
+;;
+
+let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   let rec initialize_worklist (g : grapht) (worklist : string list) : string list =
     if Graph.is_empty g then
       worklist
@@ -1217,7 +1129,7 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
               | Some arg -> [arg] )
             (get_neighbors g node_name)
         in
-        let reg_to_use = get_min_color currently_used_colors in
+        let reg_to_use = min_unused_reg currently_used_colors in
         color_help rest ((node_name, reg_to_use) :: colored)
   in
   color_help (initialize_worklist g []) init_env
@@ -1225,43 +1137,43 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
     (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-  let rec allocate_A (e : (StringSet.t * tag) aexpr) : arg name_envt tag_envt =
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (in_use : arg list) : arg name_envt tag_envt =
     match e with
     | ALet (name, value, body, _) ->
-        let value_env = allocate_C value in
-        let body_env = allocate_A body in
+        let value_env = allocate_C value in_use in
+        let body_env = allocate_A body in_use in
         value_env @ body_env
     | ASeq (f, s, _) ->
-        let f_env = allocate_C f in
-        let s_env = allocate_A s in
+        let f_env = allocate_C f in_use in
+        let s_env = allocate_A s in_use in
         f_env @ s_env
     | ALetRec (binds, body, _) ->
-        let binds_env = List.concat_map allocate_C (List.map snd binds) in
-        let body_env = allocate_A body in
-        binds_env @ body_env
-    | ACExpr c -> allocate_C c
-  and allocate_C (e : (StringSet.t * tag) cexpr) : arg name_envt tag_envt =
+        raise (NotYetImplemented "TODO")
+        (* let binds_env = List.concat_map allocate_C (List.map snd binds) in
+           let body_env = allocate_A body in
+           binds_env @ body_env *)
+    | ACExpr c -> allocate_C c in_use
+  and allocate_C (e : (StringSet.t * tag) cexpr) (in_use : arg list) : arg name_envt tag_envt =
     match e with
     | CIf (_, t, e, _) ->
-        let then_env = allocate_A t in
-        (* TODO come back and optimize this *)
-        let else_env = allocate_A e in
+        let then_env = allocate_A t in_use in
+        let else_env = allocate_A e in_use in
         then_env @ else_env
     | CLambda (args, body, (fvs, tag)) ->
-        let args_env = List.mapi (fun i a -> (a, RegOffset (i + 3, RBP))) args in
-        let body_env = allocate_A body in
-        (* TODO fill in current live environment properly *)
-        (tag, color_graph (interfere body StringSet.empty) []) :: body_env
-        (* ((tag, args_env @ free_env) :: body_env, body_si) *)
+        raise (NotYetImplemented "TODO")
+        (* let args_env = List.mapi (fun i a -> (a, RegOffset (i + 3, RBP))) args in
+           let body_env = allocate_A body in
+           (* TODO fill in current live environment properly *)
+           (tag, color_graph (interfere body StringSet.empty) []) :: body_env *)
     | _ -> []
   in
   match prog with
   | AProgram (body, (_, tag)) ->
-      let body_env = allocate_A body in
+      let body_env = allocate_A body [] in
       (* let sorted_body_env =
            List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
          in *)
-      (* TODO maybe include natives in initial environment *)
+      (* TODO maybe include natives in initial environment (in_use too?) *)
       (prog, (tag, color_graph (interfere body StringSet.empty) []) :: body_env)
 ;;
 

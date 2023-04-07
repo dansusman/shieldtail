@@ -133,7 +133,10 @@ let print_trace (trace : phase list) : string list =
     | AddedNatives p -> string_of_program p
     | Tagged p -> string_of_program_with 1000 (fun tag -> sprintf "@%d" tag) p
     | ANFed p -> string_of_aprogram_with 1000 (fun tag -> sprintf "@%d" tag) p
-    | FreeVarCached p -> string_of_aprogram_with 1000 (fun (_, tag) -> sprintf "@%d" tag) p (* TODO maybe add prettier printing with actual FVs *)
+    | FreeVarCached p ->
+        string_of_aprogram_with 1000
+          (fun (fvs, tag) -> sprintf "(FVS: [%s])" (ExtString.String.join ", " (StringSet.elements fvs)))
+          p (* TODO maybe add prettier printing with actual FVs *)
     | Located (p, e) ->
         string_of_aprogram_with 1000 (fun (_, tag) -> sprintf "@%d" tag) p
         ^ "\nEnvs:\n"

@@ -123,43 +123,62 @@ let builtins_size =
 let regalloc =
   [ tregalloc "num" "3" [(0, [])];
     tregalloc "prim1" "sub1(6)" [(0, [])];
-    tregalloc "two_prim1s" "add1(sub1(6))" [(0, [])];
-    tregalloc "three_prim1s" "add1(add1(sub1(6)))" [(0, [])] ]
+    (* TODO there's a let, there should be a reg *)
+    tregalloc "let" "let x = 1 in x" [(0, [("x_4", Reg R10)])];
+    tregalloc "two_prim1s" "add1(sub1(6))" [(0, [("unary_3", Reg R10)])];
+    (* TODO let free adder programs should use <=1 register *)
+    tregalloc "three_prim1s" "add1(add1(sub1(6)))"
+      [(0, [("unary_3", Reg R10); ("unary_4", Reg R10)])];
+    tregalloc "four_prim1s" "sub1(add1(add1(sub1(6))))"
+      [(0, [("unary_3", Reg R10); ("unary_4", Reg R10); ("unary_5", Reg R10)])];
+    tregalloc "plus" "3 + 4" [(0, [])];
+    tregalloc "plus3" "3 + 4 + 5" [(0, [("binop_3", Reg R10)])];
+    tregalloc "plus4" "3 + 4 + 5 + 6" [(0, [("binop_3", Reg R10); ("binop_4", Reg R10)])];
+    tregalloc "plus_times" "(3 + 4) * (5 + 6)" [(0, [("binop_3", Reg R12); ("binop_6", Reg R10)])];
+    tregalloc "nested_let_both_bottom" "let x = 1, y = 2 in (x, y)"
+      [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
+    tregalloc "nested_let_neither_bottom" "let x = 1, y = 2 in 3"
+      [(0, [("x_4", Reg R10); ("y_8", Reg R10)])];
+    tregalloc "nested_let_first_bottom" "let x = 1, y = 2 in x"
+      [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
+    tregalloc "nested_let_chain" "let x = 1, y = x in y" [(0, [("x_4", Reg R10); ("y_8", Reg R10)])];
+    tregalloc "disjoint_interference"
+      "let x = 1 in let y = (let w = 3 in w) in let z = 3 in (x, y, z)"
+      [(0, [("w_11", Reg R10); ("x_4", Reg R13); ("y_8", Reg R12); ("z_16", Reg R10)])] ]
 ;;
 
 let interfere =
   [ tinterfere "num" "3" [];
     tinterfere "prim1" "sub1(6)" [];
-    tinterfere "let" "let x = 1 in x" [];
-    tinterfere "two_prim1s" "add1(sub1(6))" [];
-    tinterfere "three_prim1s" "add1(add1(sub1(6)))"
-      [("unary_3", ["unary_4"]); ("unary_4", ["unary_3"])];
-    tinterfere "nested_let" "let x = 1 in let y = 2 in x" [("x_4", ["y_8"]); ("y_8", ["x_4"])];
-    tinterfere "three_nested_let" "let x = 1 in let y = 2 in let z = 3 in x + y + z"
-      [ ("binop_15", ["z_12"; "y_8"; "x_4"]);
-        ("x_4", ["z_12"; "y_8"; "binop_15"]);
-        ("y_8", ["z_12"; "x_4"; "binop_15"]);
-        ("z_12", ["y_8"; "x_4"; "binop_15"]) ];
+    tinterfere "let" "let x = 1 in x" [("x_4", [])];
+    tinterfere "two_prim1s" "add1(sub1(6))" [("unary_3", [])];
+    tinterfere "three_prim1s" "add1(add1(sub1(6)))" [("unary_3", []); ("unary_4", [])];
+    tinterfere "nested_let" "let x = 1 in let y = 2 in (x, y)" [("x_4", ["y_8"]); ("y_8", ["x_4"])];
+    tinterfere "nested_let_not_in_bottom" "let x = 1 in let y = x in y" [("x_4", []); ("y_8", [])];
+    tinterfere "three_nested_let" "let x = 1 in let y = 2 in let z = 3 in let xy = x + y in xy + z"
+      [ ("x_4", ["z_12"; "y_8"]);
+        ("xy_16", ["z_12"]);
+        ("y_8", ["z_12"; "x_4"]);
+        ("z_12", ["y_8"; "xy_16"; "x_4"]) ];
     tinterfere "disjoint_interference"
-      "let x = 1 in let y = (let w = 3 in w) in let z = 3 in x + y + z"
-      [ ("binop_19", ["z_16"; "y_8"; "x_4"]);
-        ("w_11", ["y_8"; "x_4"]);
-        ("x_4", ["z_16"; "y_8"; "w_11"; "binop_19"]);
-        ("y_8", ["z_16"; "x_4"; "w_11"; "binop_19"]);
-        ("z_16", ["y_8"; "x_4"; "binop_19"]) ];
+      "let x = 1 in let y = (let w = 3 in w) in let z = 3 in (x, y, z)"
+      [ ("w_11", ["x_4"]);
+        ("x_4", ["z_16"; "y_8"; "w_11"]);
+        ("y_8", ["z_16"; "x_4"]);
+        ("z_16", ["y_8"; "x_4"]) ];
     tinterfere "if_simple" "if true: 1 else: 2" [];
-    tinterfere "if_in_let" "let x = true in if x: 1 else: 2" [];
-    tinterfere "lets_in_if" "if true: (let x = 1 in x) else: (let y = 2 in y)" [];
+    tinterfere "if_in_let" "let x = true in if x: 1 else: 2" [("x_4", [])];
+    tinterfere "lets_in_if" "if true: (let x = 1 in x) else: (let y = 2 in y)" [("x_6", []); ("y_11", [])];
     tinterfere "lets_in_and_out_if" "let z = true in if z: (let x = 1 in x) else: (let y = 2 in y)"
-      [];
+      [("x_10", []); ("y_15", []); ("z_4", [])];
     tinterfere "lets_in_and_out_if_interfere"
       "let z = true in if z: (let x = 1 in x) else: (let y = 2 in y + z)"
-      [("y_15", ["z_4"]); ("z_4", ["y_15"])];
+      [("x_10", []); ("y_15", ["z_4"]); ("z_4", ["y_15"])];
     tinterfere "simple_seq" "print(5); 6" [];
-    tinterfere "let_in_seq" "let x = 1 in x; let y = 2 in y" [];
-    tinterfere "let_over_seq" "let z = 3 in (let x = 1 in x; let y = 2 in y)" [];
+    tinterfere "let_in_seq" "let x = 1 in x; let y = 2 in y" [("x_4", []); ("y_12", [])];
+    tinterfere "let_over_seq" "let z = 3 in (let x = 1 in x; let y = 2 in y)" [("x_8", []); ("y_16", []); ("z_4", [])];
     tinterfere "let_over_seq_interfere" "let z = 3 in (let x = 1 in x + z; let y = 2 in y)"
-      [("x_8", ["z_4"]); ("z_4", ["x_8"])];
+      [("x_8", ["z_4"]); ("y_18", []); ("z_4", ["x_8"])];
     tinterfere "let_over_seq_interfere_both" "let z = 3 in (let x = 1 in x + z; let y = 2 in y + z)"
       [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])] ]
 ;;
@@ -248,7 +267,7 @@ let color_graph =
         ("j", Reg R14);
         ("k", Reg R13);
         ("l", Reg R12);
-        ("z", Reg R10); ] ]
+        ("z", Reg R10) ] ]
 ;;
 
 (* TODO bunch of vars *)
@@ -296,6 +315,6 @@ let gc =
 
 let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
-let suite = "unit_tests" >::: color_graph
+let suite = "unit_tests" >::: regalloc @ interfere @ remove_node @ color_graph
 
 let () = run_test_tt_main ("all_tests" >::: [suite])
