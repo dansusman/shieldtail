@@ -1,4 +1,4 @@
-#include <gc.h>
+#include "gc.h"
 
 typedef uint64_t SNAKEVAL;
 

@@ -31,8 +31,11 @@ let add_directed_edge (g : grapht) (n1 : string) (n2 : string) : grapht =
 ;;
 
 let add_edge (g : grapht) (n1 : string) (n2 : string) : grapht =
-  let g' = add_directed_edge g n1 n2 in
-  add_directed_edge g' n2 n1
+  if n1 = n2 then
+    g
+  else
+    let g' = add_directed_edge g n1 n2 in
+    add_directed_edge g' n2 n1
 ;;
 
 let get_neighbors (g : grapht) (name : string) : string list =

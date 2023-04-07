@@ -14,3 +14,4 @@ output/*/*.dSYM
 _build/*
 do_pass_lerner/
 do_err_lerner/
+**/.vscode

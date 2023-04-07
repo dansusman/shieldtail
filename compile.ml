@@ -1177,19 +1177,42 @@ let register_allocation (prog : (StringSet.t * tag) aprogram) :
       (prog, (tag, color_graph (interfere body StringSet.empty) []) :: body_env)
 ;;
 
-(* Returns the stack-index of the deepest stack index used for any
+(* Returns the stack-index (in words) of the deepest stack index used for any
    of the variables in this expression *)
-let rec deepest_stack (env : arg name_envt) : int =
-  List.fold_left
-    (fun soFar (_, arg) ->
-      match arg with
-      | RegOffset (offset, RBP) ->
-          let size = -1 * offset in
-          max size soFar
-      | _ ->
-          raise (InternalCompilerError "All environment entries should be offsets from RBP for now")
-      )
-    0 env
+let rec deepest_stack e env =
+  let rec helpA e =
+    match e with
+    | ALet (name, bind, body, _) ->
+        List.fold_left max 0 [name_to_offset name; helpC bind; helpA body]
+    | ALetRec (binds, body, _) ->
+        List.fold_left max (helpA body) (List.map (fun (_, bind) -> helpC bind) binds)
+    | ASeq (first, rest, _) -> max (helpC first) (helpA rest)
+    | ACExpr e -> helpC e
+  and helpC e =
+    match e with
+    | CIf (c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
+    | CPrim1 (_, i, _) -> helpI i
+    | CPrim2 (_, i1, i2, _) -> max (helpI i1) (helpI i2)
+    | CApp (_, args, _, _) -> List.fold_left max 0 (List.map helpI args)
+    | CTuple (vals, _) -> List.fold_left max 0 (List.map helpI vals)
+    | CGetItem (t, _, _) -> helpI t
+    | CSetItem (t, _, v, _) -> max (helpI t) (helpI v)
+    | CLambda (args, body, _) ->
+        let new_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args @ env in
+        deepest_stack body new_env
+    | CImmExpr i -> helpI i
+  and helpI i =
+    match i with
+    | ImmNil _ -> 0
+    | ImmNum _ -> 0
+    | ImmBool _ -> 0
+    | ImmId (name, _) -> name_to_offset name
+  and name_to_offset name =
+    match find env name with
+    | RegOffset (bytes, RBP) -> bytes / (-1 * word_size) (* negative because stack direction *)
+    | _ -> 0
+  in
+  max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
 ;;
 
 let count_vars e =
@@ -1209,13 +1232,7 @@ let count_vars e =
   helpA e
 ;;
 
-let rec replicate x i =
-  if i = 0 then
-    []
-  else
-    x :: replicate x (i - 1)
-
-and reserve size tag =
+let rec reserve size tag =
   let ok = sprintf "$memcheck_%d" tag in
   [ IInstrComment
       (IMov (Reg RAX, LabelContents "?HEAP_END"), sprintf "Reserving %d words" (size / word_size));
@@ -1245,11 +1262,11 @@ and compile_fun
     (body : (StringSet.t * tag) aexpr)
     (initial_env : arg name_envt tag_envt)
     (tag : tag) =
-  let space = deepest_stack (find initial_env tag) in
+  let space = deepest_stack body (find initial_env tag) in
   let setup =
-    [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
+    [ILabel name; IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
     @ (* ISub (Reg RSP, Const (Int64.of_int space))  *)
-    replicate (IPush (Sized (QWORD_PTR, Const 0L))) ((space / word_size) + 1)
+    replicate (IPush (Sized (QWORD_PTR, Const 0L))) (space + 1)
   in
   let c_body = compile_aexpr body initial_env tag "no_lambda_bound!" in
   let postlude = [IMov (Reg RSP, Reg RBP); IPop (Reg RBP); IRet] in
@@ -1536,7 +1553,7 @@ and compile_cexpr
       in
       let num_frees = List.length frees in
       let locals_space =
-        deepest_stack lam_env
+        deepest_stack body lam_env
         (* try deepest_stack body lam_env
            with InternalCompilerError _ -> raise (InternalCompilerError "AHA3") *)
       in
@@ -1559,11 +1576,8 @@ and compile_cexpr
                frees )
         in
         let postlude = [IMov (Reg RSP, Reg RBP); IPop (Reg RBP); IRet; ILabel lam_done_label] in
-        (* [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)] *)
-        (* @ replicate (IPush (HexConst 0xDEADC0DEL)) (locals_space / word_size) *)
         [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
-        @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) ((locals_space / word_size) + num_frees)
-          (* ISub (Reg RSP, Const (Int64.of_int (locals_space + (num_frees * word_size))))  *)
+        @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) (locals_space + num_frees)
         @ loadSelf @ loadFrees @ c_body @ postlude
       in
       let closure_creation =
@@ -1715,7 +1729,8 @@ let add_native_lambdas (p : sourcespan program) =
 
 let compile_prog (anfed, (env : arg name_envt tag_envt)) =
   let prelude =
-    "section .text\n\
+    "default rel\n\
+     section .text\n\
      extern ?error\n\
      extern ?input\n\
      extern ?print\n\
@@ -1789,7 +1804,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
               "by adding no more than 15 to it" ) ]
       in
       let set_stack_bottom =
-        [ILabel "?our_code_starts_here"; IMov (Reg R12, Reg RDI)]
+        [IMov (Reg R12, Reg RDI)]
         @ native_call (Label "?set_stack_bottom") [Reg RBP]
         @ [IMov (Reg RDI, Reg R12)]
       in
