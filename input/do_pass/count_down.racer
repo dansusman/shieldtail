@@ -1,0 +1,4 @@
+def count(n):
+    if n == 0: 0
+    else: count(n - 1)
+count(2)

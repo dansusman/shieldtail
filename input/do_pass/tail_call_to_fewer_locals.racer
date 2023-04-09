@@ -1,0 +1,6 @@
+def f():
+    let x = 1 in 12
+
+def g():
+    2
+f()

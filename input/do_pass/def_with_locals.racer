@@ -1,0 +1,6 @@
+def second_plus_one_times_3(x, y):
+    let z = print(y), plus_one = z + 1 in
+    let times_3 = plus_one * 3 in
+    print(times_3)
+
+second_plus_one_times_3(182, 43)

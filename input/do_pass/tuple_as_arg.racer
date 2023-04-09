@@ -1,0 +1,3 @@
+def get_first_of_tuple((f, s)):
+    f
+get_first_of_tuple((1, 2))

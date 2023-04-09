@@ -1,0 +1,2 @@
+let x = 18 in
+let rec fact = (lambda (n): if n <= 1: 1 else: print(x); n * fact(sub1(n))) in fact(5)

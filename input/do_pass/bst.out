@@ -1,0 +1,6 @@
+(2, (1, (3, nil)))
+(2, (1, nil, nil), (3, nil, (4, nil, nil)))
+false
+true
+false
+true

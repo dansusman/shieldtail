@@ -1,0 +1,4 @@
+def fact(n):
+    if n <= 0: print(1) 
+    else: n * fact(sub1(n))
+fact(fact(3))

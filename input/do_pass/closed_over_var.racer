@@ -1,0 +1,4 @@
+def foo(x):
+    (lambda(a): a + x)
+
+foo(4)(5)

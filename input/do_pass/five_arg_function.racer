@@ -1,0 +1,3 @@
+def hungry(a, b, c, d, e):
+    (a, b, c, d, e)
+hungry(1, 2, 3, 4, 5)

@@ -1,0 +1,10 @@
+print(((), (nil, ), (2, (3, 4))) == ((), (nil, ), (2, (3, 4))));
+let t = ((), (nil, ), (2, (3, 4))) in 
+print(t == t);
+let t2 = t in
+print(t2 == t);
+t2[0] := 1;
+print(t == t2);
+print(equal(t, t2));
+print(equal(t2, (1, (nil, ), (2, (3, 4)))));
+equal(t2, ((), (nil, ), (2, (3, 4))))

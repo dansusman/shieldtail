@@ -1,0 +1,3 @@
+def loop():
+    loop()
+loop()

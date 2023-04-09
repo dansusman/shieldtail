@@ -1,0 +1,5 @@
+def one_local(a):
+    a
+def no_locals():
+    one_local(1)
+no_locals()

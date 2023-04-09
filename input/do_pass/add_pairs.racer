@@ -1,0 +1,3 @@
+def add_pairs((x1, y1), (x2, y2)):
+  (x1 + x2, y1 + y2)
+add_pairs((1, 2), (3, 4))

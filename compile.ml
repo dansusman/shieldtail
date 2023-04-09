@@ -7,6 +7,12 @@ open Errors
 open Graph
 module StringSet = Set.Make (String)
 
+let c_global_function_names = ["input"; "print"; "equal"; "error"; "print_stack"]
+
+let c_global_function_arities =
+  [("input", 0); ("print", 1); ("equal", 2); ("error", 2); ("print_stack", 1)]
+;;
+
 type 'a name_envt = (string * 'a) list
 
 type 'a tag_envt = (tag * 'a) list
@@ -93,7 +99,8 @@ let initial_val_env = []
 
 let prim_bindings = []
 
-let native_fun_bindings = [("equal", 2); ("input", 0)]
+let native_fun_bindings = []
+(* [("equal", 2); ("input", 0)] *)
 
 let initial_fun_env =
   prim_bindings @ [("equal", (dummy_span, Some 2, Some 2)); ("input", (dummy_span, Some 0, Some 0))]
@@ -546,7 +553,18 @@ let desugar (p : sourcespan program) : sourcespan program =
     | EBool (b, tag) -> EBool (b, tag)
     | ENil (t, tag) -> ENil (t, tag)
     | EPrim1 (op, e, tag) -> EPrim1 (op, helpE e, tag)
-    | EPrim2 (op, e1, e2, tag) -> EPrim2 (op, helpE e1, helpE e2, tag)
+    | EPrim2 (op, l, r, info) -> (
+        (* Desugaring AND and OR seems to mess with error messages for non-boolean values.
+           Here, we convert each side into a double negated version of itself to preserve
+           the boolean requirement, then we can translate into equivalent If expressions
+        *)
+        let double_negative (e : 'a expr) = EPrim1 (Not, EPrim1 (Not, e, info), info) in
+        let desugared_l = double_negative (helpE l) in
+        let desugared_r = double_negative (helpE r) in
+        match op with
+        | And -> EIf (desugared_l, desugared_r, EBool (false, info), info)
+        | Or -> EIf (desugared_l, EBool (true, info), desugared_r, info)
+        | _ -> EPrim2 (op, helpE l, helpE r, info) )
     | ELet (binds, body, tag) ->
         let newbinds = List.map helpBE binds in
         List.fold_right (fun binds body -> ELet (binds, body, tag)) newbinds (helpE body)
@@ -571,6 +589,44 @@ let desugar (p : sourcespan program) : sourcespan program =
         ELambda (params, newbody, tag)
   in
   helpP p
+;;
+
+(* Returns the stack-index (in words) of the deepest stack index used for any
+   of the variables in this expression *)
+let rec deepest_stack e env =
+  let rec helpA e =
+    match e with
+    | ALet (name, bind, body, _) ->
+        List.fold_left max 0 [name_to_offset name; helpC bind; helpA body]
+    | ALetRec (binds, body, _) ->
+        List.fold_left max (helpA body) (List.map (fun (_, bind) -> helpC bind) binds)
+    | ASeq (first, rest, _) -> max (helpC first) (helpA rest)
+    | ACExpr e -> helpC e
+  and helpC e =
+    match e with
+    | CIf (c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
+    | CPrim1 (_, i, _) -> helpI i
+    | CPrim2 (_, i1, i2, _) -> max (helpI i1) (helpI i2)
+    | CApp (_, args, _, _) -> List.fold_left max 0 (List.map helpI args)
+    | CTuple (vals, _) -> List.fold_left max 0 (List.map helpI vals)
+    | CGetItem (t, _, _) -> helpI t
+    | CSetItem (t, _, v, _) -> max (helpI t) (helpI v)
+    | CLambda (args, body, _) ->
+        let new_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args @ env in
+        deepest_stack body new_env
+    | CImmExpr i -> helpI i
+  and helpI i =
+    match i with
+    | ImmNil _ -> 0
+    | ImmNum _ -> 0
+    | ImmBool _ -> 0
+    | ImmId (name, _) -> name_to_offset name
+  and name_to_offset name =
+    match find env name with
+    | RegOffset (bytes, RBP) -> bytes / (-1 * word_size) (* negative because stack direction *)
+    | _ -> 0
+  in
+  max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
 ;;
 
 (* ASSUMES desugaring is complete *)
@@ -621,14 +677,13 @@ let rename_and_tag (p : tag program) : tag program =
     | EBool _ -> e
     | ENil _ -> e
     | EId (name, tag) -> ( try EId (find env name, tag) with InternalCompilerError _ -> e )
-    | EApp (func, args, native, tag) ->
-        let func = helpE env func in
-        let call_type =
-          (* TODO: If you want, try to determine whether func is a known function name, and if so,
-             whether it's a Snake function or a Native function *)
-          Snake
-        in
-        EApp (func, List.map (helpE env) args, call_type, tag)
+    | EApp (func, args, native, tag) -> (
+      match func with
+      | EId (name, _) when find_one c_global_function_names name ->
+          EApp (func, List.map (helpE env) args, Native, tag)
+      | _ ->
+          let func = helpE env func in
+          EApp (func, List.map (helpE env) args, Snake, tag) )
     | ELet (binds, body, tag) ->
         let binds', env' = helpBG env binds in
         let body' = helpE env' body in
@@ -987,99 +1042,6 @@ let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
   | AProgram (body, tag) -> AProgram (free_vars_A body, (free_vars body, tag))
 ;;
 
-(* let rec fvc_C (e : 'a cexpr) (bound : StringSet.t) : (StringSet.t * 'a) cexpr =
-       let free_vars_I_list (es : 'a immexpr list) (bound : StringSet.t) : StringSet.t =
-         List.fold_left
-           (fun free curr -> StringSet.union free (free_vars_I curr bound))
-           StringSet.empty es
-       in
-       match e with
-       | CIf (c, t, e, _) ->
-           let c_free = free_vars_I c bound in
-           let t_free = free_vars_A t bound in
-           let e_free = free_vars_A e bound in
-           StringSet.union (StringSet.union c_free t_free) e_free
-       | CPrim1 (_, op, _) -> free_vars_I op bound
-       | CPrim2 (_, op1, op2, _) ->
-           let op1_free = free_vars_I op1 bound in
-           let op2_free = free_vars_I op2 bound in
-           StringSet.union op1_free op2_free
-       | CApp (_, args, Native, _) -> free_vars_I_list args bound
-       | CApp (func, args, _, _) ->
-           let func_free = free_vars_I func bound in
-           let args_free = free_vars_I_list args bound in
-           StringSet.union func_free args_free
-       | CTuple (els, _) -> free_vars_I_list els bound
-       | CGetItem (tup, idx, _) ->
-           let tup_free = free_vars_I tup bound in
-           let idx_free = free_vars_I idx bound in
-           StringSet.union tup_free idx_free
-       | CSetItem (tup, idx, new_val, _) ->
-           let tup_free = free_vars_I tup bound in
-           let idx_free = free_vars_I idx bound in
-           let new_val_free = free_vars_I new_val bound in
-           StringSet.union (StringSet.union tup_free idx_free) new_val_free
-       | CLambda (args, body, _) -> free_vars_A body (StringSet.union (StringSet.of_list args) bound)
-       | CImmExpr i -> free_vars_I i bound
-     and fvc_I (e : 'a immexpr) (bound : StringSet.t) : (StringSet.t * 'a) immexpr =
-       match e with
-       | ImmNum _ | ImmBool _ | ImmNil _ -> StringSet.empty
-       | ImmId (id, _) -> (
-         match StringSet.find_opt id bound with
-         | Some _ -> StringSet.empty
-         | None -> StringSet.singleton id )
-     and fvc_A (e : 'a aexpr) (bound : StringSet.t) : (StringSet.t * 'a) aexpr =
-       let free_vars_C_list (es : 'a cexpr list) (bound : StringSet.t) : StringSet.t =
-         List.fold_left
-           (fun free curr -> StringSet.union free (free_vars_C curr bound))
-           StringSet.empty es
-       in
-       match e with
-       | ASeq (f, s, tag) ->
-           let f_free = fvc_C f bound in
-           let s_free = fvc_A s bound in
-           ASeq (f_free, s_free, ((StringSet.union (get_fv_info f_free) (get_fv_info s_free)), tag))
-       | ALet (name, value, body, _) ->
-           let value_free = free_vars_C value bound in
-           let body_free = free_vars_A body (StringSet.add name bound) in
-           StringSet.union value_free body_free
-       | ALetRec (binds, body, _) ->
-           let names, values = List.split binds in
-           let new_bound = StringSet.union (StringSet.of_list names) bound in
-           let values_free = free_vars_C_list values new_bound in
-           let body_free = free_vars_A body new_bound in
-           StringSet.union values_free body_free
-       | ACExpr c -> free_vars_C c bound
-     in
-     match prog with
-     | AProgram (body, tag) ->
-         let body_ans = fvc_A body StringSet.empty in
-         AProgram (body_ans, tag)
-   ;; *)
-
-(* let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
-     match prog with
-     | AProgram (body, tag) ->
-         let body_ans = fvc_A body StringSet.empty in
-         AProgram (body_ans, tag)
-
-   and fvc_A (a_e : 'a aexpr) (env : StringSet.t) : (StringSet.t * 'a) aexpr =
-     match a_e with
-     | ASeq (f, s, tag) ->
-         let f_ans = fvc_C f env in
-         let s_ans = fvc_C s env in
-         ASeq (f_ans, s_ans, (StringSet.union (free_vars f) (free_vars s), tag))
-     | ACExpr c_e -> ACExpr (fvc_C c_e env)
-     | ALet (name, bound, body, tag) ->
-         let bound_ans = fvc_C bound env in
-         let new_env = StringSet.add name env in
-         let body_ans = fvc_A body env in
-         let body_fvs = some_helper body new_env in
-         ALet (name, bound_ans, body_ans, ((StringSet.union (...) body_fvs), tag))
-     | ALetRec (binds, body, tag) -> a_e
-
-   and fvc_C (c_e : 'a cexpr) (env : StringSet.t) : (StringSet.t * 'a) cexpr = c_e *)
-
 (* We decided to use a tag environment for the outer environment so that we don't have to
    change our implementation of ANF. Also, we think it's unlikely that we will want to
    insert any steps between allocation and compilation.*)
@@ -1289,21 +1251,6 @@ let register_allocation (prog : (StringSet.t * tag) aprogram) :
       (prog, group_tags sorted_body_env)
 ;;
 
-(* Returns the stack-index of the deepest stack index used for any
-   of the variables in this expression *)
-let rec deepest_stack (env : arg name_envt) : int =
-  List.fold_left
-    (fun soFar (_, arg) ->
-      match arg with
-      | RegOffset (offset, RBP) ->
-          let size = -1 * offset in
-          max size soFar
-      | _ ->
-          raise (InternalCompilerError "All environment entries should be offsets from RBP for now")
-      )
-    0 env
-;;
-
 let count_vars e =
   let rec helpA e =
     match e with
@@ -1357,11 +1304,11 @@ and compile_fun
     (body : (StringSet.t * tag) aexpr)
     (initial_env : arg name_envt tag_envt)
     (tag : tag) =
-  let space = deepest_stack (find initial_env tag) in
+  let space = deepest_stack body (find initial_env tag) in
   let setup =
-    [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
+    [ILabel name; IPush (Reg RBP); IMov (Reg RBP, Reg RSP); ILabel (name ^ "_body")]
     @ (* ISub (Reg RSP, Const (Int64.of_int space))  *)
-    replicate (IPush (Sized (QWORD_PTR, Const 0L))) ((space / word_size) + 1)
+    replicate (IPush (Sized (QWORD_PTR, Const 0L))) (space + 1)
   in
   let c_body = compile_aexpr body initial_env tag "no_lambda_bound!" in
   let postlude = [IMov (Reg RSP, Reg RBP); IPop (Reg RBP); IRet] in
@@ -1392,10 +1339,12 @@ and compile_aexpr
             (* INVARIANT: Compiling each lambda will place the result in RAX.
                Thus, we can just move the result where we want it.
             *)
-            c_lam
-            @ [ IInstrComment
-                  ( IMov (find_with_tag env lambda_tag name, Reg RAX),
-                    sprintf "saving lambda %s" name ) ] )
+            [ IMov (Reg scratch_reg, Reg heap_reg);
+              IOr (Reg scratch_reg, HexConst closure_tag);
+              IInstrComment
+                ( IMov (find_with_tag env lambda_tag name, Reg scratch_reg),
+                  sprintf "saving lambda %s" name ) ]
+            @ c_lam )
           binds
       in
       let compiled_body = compile_aexpr body env lambda_tag bound_lam_name in
@@ -1416,6 +1365,7 @@ and compile_cexpr
       IMov (Reg scratch_reg, imm);
       ICmp (Reg RAX, Const tag);
       IJne (Label dest) ]
+    (* TODO: look at this ? *)
   in
   let check_num_tag (imm : arg) (dest : string) = check_tag imm num_tag_mask num_tag dest in
   let check_tup_tag (imm : arg) (dest : string) = check_tag imm tuple_tag_mask tuple_tag dest in
@@ -1537,14 +1487,15 @@ and compile_cexpr
             IMov (Reg RAX, const_false);
             ILabel eq_label ]
       | CheckSize ->
-          [ IMov (Reg RAX, c_left);
-            ISub (Reg RAX, Const tuple_tag);
-            IMov (Reg scratch_reg, c_right);
-            (* ISar (Reg scratch_reg, Const 1L); *)
-            ICmp (Reg scratch_reg, RegOffset (0, RAX));
-            IMov (Reg scratch_reg, c_left);
-            IJne (Label "?err_tuple_destructure_mismatch");
-            IAdd (Reg RAX, Const tuple_tag) ] )
+          check_nil c_left
+          @ [ IMov (Reg RAX, c_left);
+              ISub (Reg RAX, Const tuple_tag);
+              IMov (Reg scratch_reg, c_right);
+              (* ISar (Reg scratch_reg, Const 1L); *)
+              ICmp (Reg scratch_reg, RegOffset (0, RAX));
+              IMov (Reg scratch_reg, c_left);
+              IJne (Label "?err_tuple_destructure_mismatch");
+              IAdd (Reg RAX, Const tuple_tag) ] )
   | CIf (cond, thn, els, (_, tag)) ->
       let done_label = sprintf "done_%d" tag in
       let else_label = sprintf "if_false_%d" tag in
@@ -1601,7 +1552,8 @@ and compile_cexpr
           IJl (Label "?err_get_low_index");
           ICmp (Reg scratch_reg, RegOffset (0, RAX));
           IJge (Label "?err_get_high_index");
-          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, 0)) ]
+          ISar (Reg scratch_reg, Const 1L);
+          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, word_size)) ]
   | CSetItem (tup, idx, value, _) ->
       let c_tup = compile_imm tup env lambda_tag in
       let c_idx = compile_imm idx env lambda_tag in
@@ -1620,6 +1572,7 @@ and compile_cexpr
             ( IPush (Reg R10),
               "saving R10 to the stack - we need to use it as a temp for the following mov" );
           IMov (Reg R10, c_val);
+          ISar (Reg scratch_reg, Const 1L);
           IMov (Sized (QWORD_PTR, RegOffsetReg (RAX, scratch_reg, word_size, word_size)), Reg R10);
           IPop (Reg R10);
           IMov (Reg RAX, c_val) ]
@@ -1647,11 +1600,7 @@ and compile_cexpr
         List.sort compare (StringSet.elements fvs)
       in
       let num_frees = List.length frees in
-      let locals_space =
-        deepest_stack lam_env
-        (* try deepest_stack body lam_env
-           with InternalCompilerError _ -> raise (InternalCompilerError "AHA3") *)
-      in
+      let locals_space = deepest_stack body lam_env in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
       let lambda_body =
@@ -1674,7 +1623,7 @@ and compile_cexpr
         (* [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)] *)
         (* @ replicate (IPush (HexConst 0xDEADC0DEL)) (locals_space / word_size) *)
         [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
-        @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) ((locals_space / word_size) + num_frees)
+        @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) (locals_space + num_frees)
           (* ISub (Reg RSP, Const (Int64.of_int (locals_space + (num_frees * word_size))))  *)
         @ loadSelf @ loadFrees @ c_body @ postlude
       in
@@ -1753,18 +1702,18 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed then
-      [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-    else
-      [] )
+        [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+      else
+        [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0 then
-      []
-    else
-      [ IInstrComment
-          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-            sprintf "Popping %d arguments" num_stack_args ) ] )
+        []
+      else
+        [ IInstrComment
+            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+              sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed then
       [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
@@ -1773,7 +1722,6 @@ and native_call label args =
   in
   setup @ [ICall label] @ teardown
 
-(* UPDATE THIS TO HANDLE FIRST-CLASS FUNCTIONS AS NEEDED -- THIS CODE WILL NOT WORK AS WRITTEN *)
 and call (closure : arg) args =
   let arity = List.length args in
   let setup = [IMov (Reg RAX, closure); ISub (Reg RAX, HexConst closure_tag)] in
@@ -1827,12 +1775,13 @@ let add_native_lambdas (p : sourcespan program) =
 
 let compile_prog (anfed, (env : arg name_envt tag_envt)) =
   let prelude =
-    "section .text\n\
+    "default rel\n\
+     section .text\n\
      extern ?error\n\
-     extern ?input\n\
+     extern input\n\
      extern ?print\n\
      extern ?print_stack\n\
-     extern ?equal\n\
+     extern equal\n\
      extern ?try_gc\n\
      extern ?naive_print_heap\n\
      extern ?HEAP\n\
@@ -1868,7 +1817,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm (native_call (Label "?error") [Const err_OVERFLOW; Reg RAX]))
       (to_asm (native_call (Label "?error") [Const err_GET_NOT_TUPLE; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_GET_LOW_INDEX; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_GET_HIGH_INDEX]))
+      (to_asm (native_call (Label "?error") [Const err_GET_HIGH_INDEX; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_NIL_DEREF; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_OUT_OF_MEMORY; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_SET_NOT_TUPLE; Reg scratch_reg]))
@@ -1901,11 +1850,11 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
               "by adding no more than 15 to it" ) ]
       in
       let set_stack_bottom =
-        [ILabel "?our_code_starts_here"; IMov (Reg R12, Reg RDI)]
+        [IMov (Reg R12, Reg RDI)]
         @ native_call (Label "?set_stack_bottom") [Reg RBP]
         @ [IMov (Reg RDI, Reg R12)]
       in
-      let main = prologue @ set_stack_bottom @ heap_start @ comp_main @ epilogue in
+      let main = prologue @ heap_start @ set_stack_bottom @ comp_main @ epilogue in
       sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
 

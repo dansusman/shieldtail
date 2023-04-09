@@ -1,0 +1,4 @@
+def i(a, b):
+    let rec c = (lambda (x): 5), d = (lambda (x): x + 1) in
+    (a, b, c(b), d(5))
+i(17, 4)

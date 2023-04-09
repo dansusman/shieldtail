@@ -164,10 +164,11 @@ let interfere =
       [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])] ]
 ;;
 
-
 let remove_node =
   [ t_graph "r1"
-      (remove_node (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])]) "z")
+      (remove_node
+         (graph_from_assoc_list [("x", ["y"; "z"]); ("z", ["x"; "y"]); ("y", ["x"; "z"])])
+         "z" )
       [("x", ["y"]); ("y", ["x"])] ]
 ;;
 
@@ -216,4 +217,4 @@ let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
 let suite = "unit_tests" >::: remove_node
 
-let () = run_test_tt_main ("all_tests" >::: [suite])
+let () = run_test_tt_main ("all_tests" >::: [suite; input_file_test_suite ()])

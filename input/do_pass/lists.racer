@@ -1,0 +1,59 @@
+def link(first, rest):
+  (first, rest)
+
+def length(l):
+  if l == nil: 0
+  else:
+    1 + length(l[1])
+
+def sum(l):
+    if l == nil: 0
+    else: l[0] + sum(l[1])
+
+def append(l1, l2):
+    if l1 == nil: l2
+    else: link(l1[0], append(l1[1], l2))
+
+def reverse_acc(l, acc):
+    if l == nil: acc
+    else: reverse_acc(l[1], link(l[0], acc))
+
+def reverse(l):
+    reverse_acc(l, nil)
+
+def zip(l1, l2):
+    if l1 == nil: nil
+    else: if l2 == nil: nil
+    else: link((l1[0], l2[0]), zip(l1[1], l2[1]))
+
+def interleave(l1, l2):
+    if l1 == nil: nil
+    else: if l2 == nil: nil
+    else: link(l1[0], link(l2[0], interleave(l1[1], l2[1])))
+
+def foldr(f, b, ls):
+    if ls == nil: b
+    else: f(ls[0], foldr(f, b, ls[1]))
+
+def map(f, ls):
+    foldr((lambda (x, acc): link(f(x), acc)), nil, ls)
+
+def filter(pred, ls):
+    foldr((lambda (x, acc): if pred(x): link(x, acc) else: acc), nil, ls)
+
+let mylist1 = link(1, link(2, link(3, nil))) in
+let mylist2 = link(4, link(5, link(6, link(7, nil)))) in
+print(length(mylist1));
+print(length(mylist2));
+print(sum(mylist1));
+print(sum(mylist2));
+print(append(mylist1, mylist2));
+print(sum(append(mylist1, mylist2)));
+print(reverse(mylist1));
+print(reverse(mylist2));
+print(append(mylist1, reverse(mylist2)));
+print(zip(mylist1, mylist2));
+print(interleave(mylist1, mylist2));
+print(foldr((lambda (x, y): x + y), 0, mylist1));
+print(map((lambda (x): x + 2), mylist1));
+filter((lambda (x): !(x == 2)), mylist1)

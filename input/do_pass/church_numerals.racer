@@ -1,0 +1,16 @@
+def to_num(f):
+    f((lambda (n): n + 1))(0)
+
+let zero = (lambda (f): (lambda (x): x)) in
+let succ = (lambda (n): (lambda (f): (lambda (x): f(n(f)(x))))) in
+let plus = (lambda (m): (lambda (n): m(succ)(n))) in
+let mult = (lambda (m): (lambda (n): m(plus(n))(zero))) in
+let one = succ(zero) in
+let two = succ(one) in
+let three = succ(two) in
+
+print(to_num(three));
+print(to_num(succ(three)));
+print(to_num(plus(three)(two)));
+print(to_num(mult(three)(two)));
+to_num(three(two))

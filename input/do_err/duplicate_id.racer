@@ -1,0 +1,4 @@
+def foo(x, x):
+    x
+
+foo(false, true)

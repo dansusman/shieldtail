@@ -1,0 +1,62 @@
+def node(v, l, r):
+    (v, l, r)
+
+def get_val((v, _, _)):
+    v
+
+def get_left((_, l, _)):
+    l
+
+def get_right((_, _, r)):
+    r
+
+def link(first, rest):
+  (first, rest)
+
+def append(l1, l2):
+    if l1 == nil: l2
+    else: link(l1[0], append(l1[1], l2))
+
+def inorder(tree):
+    if tree == nil:
+        tree
+    else:
+        let (v, l, r) = (tree[0], tree[1], tree[2]) in
+        append(inorder(l), link(v, inorder(r)))
+
+def insert(tree, new_val):
+    if tree == nil:
+        (new_val, nil, nil)
+    else:
+        if tree[0] < new_val:
+            (tree[0], tree[1], insert(tree[2], new_val))
+        else:
+            (tree[0], insert(tree[1], new_val), tree[2])
+
+def contains(tree, val):
+    if tree == nil:
+        false
+    else:
+        if tree[0] < val:
+            contains(tree[2], val)
+        else: 
+            if tree[0] > val:
+                contains(tree[1], val)
+            else: 
+                true
+
+def sameTree(tree1, tree2):
+    equal(tree1, tree2)
+
+def sameData(tree1, tree2):
+    equal(inorder(tree1), inorder(tree2))
+
+let invalid_root = (1, (2, nil, nil), (3, nil, nil)) in
+let valid_root = (2, (1, nil, nil), (3, nil, nil)) in
+let other_root = (1, nil, (2, nil, (3, nil, nil))) in
+print(inorder(invalid_root));
+print(insert(valid_root, 4));
+print(contains(valid_root, 4));
+print(contains(insert(valid_root, 4), 4));
+print(sameTree(insert(valid_root, 4), valid_root));
+print(sameData(valid_root, other_root))

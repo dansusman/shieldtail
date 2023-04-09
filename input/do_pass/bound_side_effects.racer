@@ -1,0 +1,1 @@
+let _ = print(8), x = print(5) in x

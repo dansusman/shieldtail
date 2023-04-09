@@ -1,6 +1,4 @@
-#include <gc.h>
-
-typedef uint64_t SNAKEVAL;
+#include "gc.h"
 
 #define OUT stdout
 #ifdef DEBUG
@@ -12,7 +10,10 @@ typedef uint64_t SNAKEVAL;
   } while (0)
 #endif
 
+typedef uint64_t SNAKEVAL;
+
 void printHelp(FILE *out, SNAKEVAL val);
+SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("?print_stack");
 extern uint64_t NUM_TAG_MASK;
 extern uint64_t CLOSURE_TAG_MASK;
 extern uint64_t TUPLE_TAG_MASK;
@@ -36,6 +37,8 @@ void naive_print_heap(uint64_t *heap, uint64_t *heap_end)
     DEBUG_PRINT("  %ld/%p: %p (%ld)\n", i, (heap + i), (uint64_t *)(*(heap + i)), *(heap + i));
   }
 }
+
+// Implement the functions below
 
 void smarter_print_heap_section(uint64_t *heap, uint64_t *heap_end)
 {
@@ -78,18 +81,17 @@ bool valIsForwarding(uint64_t val)
   return (val & FORWARDING_TAG_MASK) == FORWARDING_TAG;
 }
 
-// Performs the GC copying logic for Closure values
-uint64_t copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
+uint64_t *copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
 {
   DEBUG_PRINT("Copying closure\n");
-  SNAKEVAL closure = *closure_addr;
+  uint64_t closure = *closure_addr;
   uint64_t *closure_ptr = (uint64_t *)(closure - CLOSURE_TAG);
 
   if (valIsForwarding(*closure_ptr))
   {
     uint64_t *forward_ptr = (uint64_t *)(*closure_ptr - FORWARDING_TAG);
     DEBUG_PRINT("Found forwarding pointer %018llx\n", (uint64_t)forward_ptr);
-    uint64_t retagged_ptr = (uint64_t)forward_ptr + CLOSURE_TAG;
+    uint64_t retagged_ptr = (uint64_t)forward_ptr + TUPLE_TAG;
     *closure_addr = retagged_ptr;
     return heap_top;
   }
@@ -101,7 +103,7 @@ uint64_t copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
   for (int i = 0; i < padded_closure_length; i++)
   {
     DEBUG_PRINT("Copying value at closure[%d] ", i);
-    DEBUG_PRINT(printHelp(OUT, closure_ptr[i]));
+    printHelp(OUT, closure_ptr[i]);
     DEBUG_PRINT(" from %p to %p\n", closure_ptr + i, heap_top + i);
     heap_top[i] = closure_ptr[i];
   }
@@ -115,17 +117,16 @@ uint64_t copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
   uint64_t *new_heap_top = heap_top + padded_closure_length;
   for (int i = 3; i < closure_length; i++)
   {
-    new_heap_top = copy_if_needed(&closure_addr[i], new_heap_top);
+    new_heap_top = copy_if_needed(&closure_ptr[i], new_heap_top);
   }
 
   return new_heap_top;
 }
 
-// Performs the GC copying logic for Tuple values
-uint64_t copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
+uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
 {
   DEBUG_PRINT("Copying tuple\n");
-  SNAKEVAL tuple = *tuple_addr;
+  uint64_t tuple = *tuple_addr;
   uint64_t *tuple_ptr = (uint64_t *)(tuple - TUPLE_TAG);
 
   if (valIsForwarding(*tuple_ptr))
@@ -144,7 +145,7 @@ uint64_t copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
   for (int i = 0; i < padded_tuple_length; i++)
   {
     DEBUG_PRINT("Copying value at tuple[%d] (raw, not index) ", i);
-    DEBUG_PRINT(printHelp(OUT, tuple_ptr[i]));
+    printHelp(OUT, tuple_ptr[i]);
     DEBUG_PRINT(" from %p to %p\n", tuple_ptr + i, heap_top + i);
     heap_top[i] = tuple_ptr[i];
   }
@@ -158,18 +159,18 @@ uint64_t copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
   uint64_t *new_heap_top = heap_top + padded_tuple_length;
   for (int i = 1; i < tuple_length; i++)
   {
-    new_heap_top = copy_if_needed(&tuple_addr[i], new_heap_top);
+    new_heap_top = copy_if_needed(&tuple_ptr[i], new_heap_top);
   }
 
   return new_heap_top;
 }
 
 /*
-  Copies a Racer value from the given address to the new heap,
+  Copies a Garter value from the given address to the new heap,
   but only if the value is heap-allocated and needs copying.
 
   Arguments:
-    garter_val_addr: the *address* of some Racer value, which contains a Racer value,
+    garter_val_addr: the *address* of some Garter value, which contains a Garter value,
                      i.e. a tagged word.
                      It may or may not be a pointer to a heap-allocated value...
     heap_top: the location at which to begin copying, if any copying is needed
@@ -184,18 +185,12 @@ uint64_t copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
 uint64_t *copy_if_needed(uint64_t *garter_val_addr, uint64_t *heap_top)
 {
   uint64_t garter_val = *garter_val_addr;
-
-  if (garter_val == NIL)
-  {
-    return heap_top;
-  }
-
   if (valIsClosure(garter_val))
   {
     uint64_t *new_heap_top = copyClosure(garter_val_addr, heap_top);
     if (new_heap_top != heap_top)
     {
-      uint64_t closure_ptr = ((uint64_t)heap_top) + CLOSURE_TAG;
+      uint64_t closure_ptr = ((uint64_t)heap_top) + TUPLE_TAG;
       *garter_val_addr = closure_ptr;
     }
     return new_heap_top;
@@ -226,9 +221,9 @@ uint64_t *copy_if_needed(uint64_t *garter_val_addr, uint64_t *heap_top)
   Implements Cheney's garbage collection algorithm.
 
   Arguments:
-    bottom_frame: the base pointer of our_code_starts_here, i.e. the bottommost Racer frame
-    top_frame: the base pointer of the topmost Racer stack frame
-    top_stack: the current stack pointer of the topmost Racer stack frame
+    bottom_frame: the base pointer of our_code_starts_here, i.e. the bottommost Garter frame
+    top_frame: the base pointer of the topmost Garter stack frame
+    top_stack: the current stack pointer of the topmost Garter stack frame
     from_start and from_end: bookend the from-space of memory that is being compacted
     to_start: the beginning of the to-space of memory
 
@@ -267,7 +262,7 @@ uint64_t *gc(uint64_t *bottom_frame, uint64_t *top_frame, uint64_t *top_stack, u
     top_stack = top_frame + 2;
     old_top_frame = top_frame;
     top_frame = (uint64_t *)(*top_frame);
-  } while (old_top_frame <= bottom_frame); // Use the old stack frame to decide if there's more GC'ing to do
+  } while (old_top_frame < bottom_frame); // Use the old stack frame to decide if there's more GC'ing to do
 
   // after copying and GC'ing all the stack frames, return the new allocation starting point
   return to_start;

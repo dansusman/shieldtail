@@ -1,0 +1,10 @@
+def apply(f, x):
+    f(x)
+
+def apply2(f, x, y):
+    f(x, y)
+
+apply(print, 5);
+apply(print, nil);
+apply2(equal, (1, 2));
+apply2(equal, (1, 2), (1, 2))

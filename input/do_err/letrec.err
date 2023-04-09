@@ -1,0 +1,3 @@
+Let-rec expected a name binding to a lambda; got a
+Binding error at do_err/letrec, 1:15-1:20: Let-rec expected a name binding to a lambda; got b
+Binding error at do_err/letrec, 1:22-1:27: Let-rec expected a name binding to a lambda; got c

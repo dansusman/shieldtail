@@ -1,0 +1,7 @@
+def take(ls, n):
+    if n == 0: nil
+    else: (ls[0], take(ls[1], n - 1))
+
+let ones = (1, nil) in
+ones[1] := ones;
+take(ones, 5)

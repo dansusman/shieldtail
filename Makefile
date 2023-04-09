@@ -1,4 +1,11 @@
 SNAKE_EXT=racer
+ARCH := $(shell arch)
+ifeq ($(ARCH), arm64)
+  M1_PREFIX=arch -x86_64
+else
+  M1_PREFIX=
+endif
+
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
   NASM_FORMAT=elf64
@@ -22,7 +29,7 @@ test: *.ml parser.mly lexer.mll main
 	mv test.native test
 
 output/%.run: output/%.o main.c gc.c
-	clang $(CLANG_FLAGS) -o $@ gc.c main.c $<
+	$(M1_PREFIX) clang $(CLANG_FLAGS) -o $@ gc.c main.c $<
 
 output/%.o: output/%.s
 	nasm -f $(NASM_FORMAT) -o $@ $<
