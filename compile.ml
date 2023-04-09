@@ -1121,39 +1121,44 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht 
   match e with
   | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live)
   | ALet (name, bound, body, (fvs, _)) ->
-      let body_free = StringSet.elements fvs in
-      let bound_interfere = help_C bound in
+      let body_free = StringSet.elements (get_fv_info body) in
+      (* let bound_interfere = help_C bound in *)
       let new_graph =
-        List.fold_right (fun fv prev_graph -> add_edge prev_graph name fv) body_free bound_interfere
+        List.fold_right
+          (fun fv prev_graph -> add_edge prev_graph name fv)
+          body_free
+          (* every bound name should be added as a node so a register is given to it *)
+          (Graph.singleton name StringSet.empty)
       in
       merge_two new_graph (interfere body (StringSet.add name live))
   | ALetRec (binds, body, (fvs, _)) -> raise (NotYetImplemented "TODO")
   | ACExpr c_e -> help_C c_e
 ;;
 
-let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
-  let get_min_color (used : arg list) : arg =
-    (* TODO make sure to push and pop native call regs if needed *)
-    (* NOTE: excluding R11 because it's our scratch_reg *)
-    let reg_priority =
-      List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
-    in
-    let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
-      match reg_priority with
-      | [] ->
-          let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
-          if List.mem curr_height_offset used then
-            min_color_help reg_priority (stack_height + 1)
-          else
-            curr_height_offset
-      | to_try :: rest ->
-          if List.mem to_try used then
-            min_color_help rest stack_height
-          else
-            to_try
-    in
-    min_color_help reg_priority 1
+let min_unused_reg (used : arg list) : arg =
+  (* TODO make sure to push and pop native call regs if needed *)
+  (* NOTE: excluding R11 because it's our scratch_reg *)
+  let reg_priority =
+    List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
   in
+  let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
+    match reg_priority with
+    | [] ->
+        let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
+        if List.mem curr_height_offset used then
+          min_color_help reg_priority (stack_height + 1)
+        else
+          curr_height_offset
+    | to_try :: rest ->
+        if List.mem to_try used then
+          min_color_help rest stack_height
+        else
+          to_try
+  in
+  min_color_help reg_priority 1
+;;
+
+let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   let rec initialize_worklist (g : grapht) (worklist : string list) : string list =
     if Graph.is_empty g then
       worklist
@@ -1169,7 +1174,7 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   in
   let rec color_help (worklist : string list) (colored : arg name_envt) : arg name_envt =
     match worklist with
-    | [] -> []
+    | [] -> colored
     | node_name :: rest ->
         let currently_used_colors =
           List.concat_map
@@ -1179,7 +1184,7 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
               | Some arg -> [arg] )
             (get_neighbors g node_name)
         in
-        let reg_to_use = get_min_color currently_used_colors in
+        let reg_to_use = min_unused_reg currently_used_colors in
         color_help rest ((node_name, reg_to_use) :: colored)
   in
   color_help (initialize_worklist g []) init_env
@@ -1187,68 +1192,44 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
     (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-  let allocate_name name si = (name, RegOffset (~-si * word_size, RBP)) in
-  let rec allocate_A (e : (StringSet.t * tag) aexpr) (si : int) (lambda_tag : tag) :
-      arg name_envt tag_envt * int =
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (in_use : arg list) : arg name_envt tag_envt =
     match e with
     | ALet (name, value, body, _) ->
-        let name_bind = (lambda_tag, [allocate_name name si]) in
-        let value_env, value_si = allocate_C value (si + 1) lambda_tag in
-        let body_env, body_si = allocate_A body (si + 1) lambda_tag in
-        ((name_bind :: value_env) @ body_env, max value_si body_si)
+        let value_env = allocate_C value in_use in
+        let body_env = allocate_A body in_use in
+        value_env @ body_env
     | ASeq (f, s, _) ->
-        let f_env, f_si = allocate_C f si lambda_tag in
-        let s_env, s_si = allocate_A s si lambda_tag in
-        (f_env @ s_env, max f_si s_si)
+        let f_env = allocate_C f in_use in
+        let s_env = allocate_A s in_use in
+        f_env @ s_env
     | ALetRec (binds, body, _) ->
-        let binds_env, binds_si =
-          List.fold_left
-            (fun (prev_env, prev_si) (name, value) ->
-              let name_bind = (lambda_tag, [allocate_name name prev_si]) in
-              let value_env, _ = allocate_C value (prev_si + 1) lambda_tag in
-              ((name_bind :: value_env) @ prev_env, prev_si + 1) )
-            ([], si) binds
-        in
-        let body_env, body_si = allocate_A body binds_si lambda_tag in
-        (binds_env @ body_env, body_si)
-    | ACExpr c -> allocate_C c si lambda_tag
-  and allocate_C (e : (StringSet.t * tag) cexpr) (si : int) (lambda_tag : tag) :
-      arg name_envt tag_envt * int =
+        raise (NotYetImplemented "TODO")
+        (* let binds_env = List.concat_map allocate_C (List.map snd binds) in
+           let body_env = allocate_A body in
+           binds_env @ body_env *)
+    | ACExpr c -> allocate_C c in_use
+  and allocate_C (e : (StringSet.t * tag) cexpr) (in_use : arg list) : arg name_envt tag_envt =
     match e with
     | CIf (_, t, e, _) ->
-        let then_env, then_si = allocate_A t si lambda_tag in
-        (* TODO come back and optimize this *)
-        let else_env, else_si = allocate_A e then_si lambda_tag in
-        (then_env @ else_env, max then_si else_si)
+        let then_env = allocate_A t in_use in
+        let else_env = allocate_A e in_use in
+        then_env @ else_env
     | CLambda (args, body, (fvs, tag)) ->
-        let args_env = List.mapi (fun i a -> allocate_name a ~-(i + 3)) args in
-        let free = List.sort compare (StringSet.elements fvs) in
-        let free_env, free_si =
-          List.fold_left
-            (fun (prev_env, i) fv ->
-              let current = allocate_name fv i in
-              (current :: prev_env, i + 1) )
-            ([], 1) free
-        in
-        let body_env, body_si = allocate_A body free_si tag in
-        ((tag, args_env @ free_env) :: body_env, body_si)
-    | _ -> ([], si)
-  in
-  let rec group_tags (env : arg name_envt tag_envt) : arg name_envt tag_envt =
-    match env with
-    | [] -> []
-    | [x] -> [x]
-    | (tag1, inner_env1) :: (tag2, inner_env2) :: rest when tag1 = tag2 ->
-        group_tags ((tag1, inner_env1 @ inner_env2) :: rest)
-    | mapping :: rest -> mapping :: group_tags rest
+        raise (NotYetImplemented "TODO")
+        (* let args_env = List.mapi (fun i a -> (a, RegOffset (i + 3, RBP))) args in
+           let body_env = allocate_A body in
+           (* TODO fill in current live environment properly *)
+           (tag, color_graph (interfere body StringSet.empty) []) :: body_env *)
+    | _ -> []
   in
   match prog with
   | AProgram (body, (_, tag)) ->
-      let body_env, _ = allocate_A body 1 tag in
-      let sorted_body_env =
-        List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
-      in
-      (prog, group_tags sorted_body_env)
+      let body_env = allocate_A body [] in
+      (* let sorted_body_env =
+           List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
+         in *)
+      (* TODO maybe include natives in initial environment (in_use too?) *)
+      (prog, (tag, color_graph (interfere body StringSet.empty) []) :: body_env)
 ;;
 
 let count_vars e =
@@ -1268,13 +1249,7 @@ let count_vars e =
   helpA e
 ;;
 
-let rec replicate x i =
-  if i = 0 then
-    []
-  else
-    x :: replicate x (i - 1)
-
-and reserve size tag =
+let rec reserve size tag =
   let ok = sprintf "$memcheck_%d" tag in
   [ IInstrComment
       (IMov (Reg RAX, LabelContents "?HEAP_END"), sprintf "Reserving %d words" (size / word_size));
@@ -1304,6 +1279,7 @@ and compile_fun
     (body : (StringSet.t * tag) aexpr)
     (initial_env : arg name_envt tag_envt)
     (tag : tag) =
+  let space = deepest_stack body (find initial_env tag) in
   let space = deepest_stack body (find initial_env tag) in
   let setup =
     [ILabel name; IPush (Reg RBP); IMov (Reg RBP, Reg RSP); ILabel (name ^ "_body")]
@@ -1620,8 +1596,6 @@ and compile_cexpr
                frees )
         in
         let postlude = [IMov (Reg RSP, Reg RBP); IPop (Reg RBP); IRet; ILabel lam_done_label] in
-        (* [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)] *)
-        (* @ replicate (IPush (HexConst 0xDEADC0DEL)) (locals_space / word_size) *)
         [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
         @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) (locals_space + num_frees)
           (* ISub (Reg RSP, Const (Int64.of_int (locals_space + (num_frees * word_size))))  *)
@@ -1777,6 +1751,8 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
   let prelude =
     "default rel\n\
      section .text\n\
+    "default rel\n\
+     section .text\n\
      extern ?error\n\
      extern input\n\
      extern ?print\n\
@@ -1850,6 +1826,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
               "by adding no more than 15 to it" ) ]
       in
       let set_stack_bottom =
+        [IMov (Reg R12, Reg RDI)]
         [IMov (Reg R12, Reg RDI)]
         @ native_call (Label "?set_stack_bottom") [Reg RBP]
         @ [IMov (Reg RDI, Reg R12)]
