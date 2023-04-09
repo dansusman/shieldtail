@@ -1,6 +1,6 @@
-def fact(n):
-    fact_acc(n, 1)
-and def fact_acc(n, acc):
+def fact_acc(n, acc):
     if n <= 0: print(acc)
     else: fact_acc(sub1(n), acc * n)
+def fact(n):
+    fact_acc(n, 1)
 fact(6)

@@ -99,8 +99,7 @@ let initial_val_env = []
 
 let prim_bindings = []
 
-let native_fun_bindings = []
-(* [("equal", 2); ("input", 0)] *)
+let native_fun_bindings = [("equal", 2); ("input", 0)]
 
 let initial_fun_env =
   prim_bindings @ [("equal", (dummy_span, Some 2, Some 2)); ("input", (dummy_span, Some 0, Some 0))]
@@ -580,10 +579,10 @@ let rec deepest_stack e env =
     | ImmId (name, _) -> name_to_offset name
   and name_to_offset name =
     match find_opt env name with
-    | Some (RegOffset (bytes, RBP)) ->
-        bytes / (-1 * word_size) (* negative because stack direction *)
-    | Some _ -> raise (InternalCompilerError "All deepest_stack offsets should be from RBP.")
+    | Some (RegOffset (bytes, RBP)) -> bytes / ~-word_size (* negative because stack direction *)
+    | Some _ -> 0 (* if it's not on the stack, we don't need to make room for it *)
     | None -> 0
+    (* if it's not in the environment, it's in an inner lambda that will make room for itself *)
   in
   max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
 ;;
