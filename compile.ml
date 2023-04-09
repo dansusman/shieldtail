@@ -1280,7 +1280,6 @@ and compile_fun
     (initial_env : arg name_envt tag_envt)
     (tag : tag) =
   let space = deepest_stack body (find initial_env tag) in
-  let space = deepest_stack body (find initial_env tag) in
   let setup =
     [ILabel name; IPush (Reg RBP); IMov (Reg RBP, Reg RSP); ILabel (name ^ "_body")]
     @ (* ISub (Reg RSP, Const (Int64.of_int space))  *)
@@ -1311,16 +1310,24 @@ and compile_aexpr
       let compiled_closures =
         List.concat_map
           (fun (name, lam) ->
+            let fvs = get_fv_info (ACExpr lam) in
             let c_lam = compile_cexpr lam env lambda_tag name in
             (* INVARIANT: Compiling each lambda will place the result in RAX.
                Thus, we can just move the result where we want it.
             *)
-            [ IMov (Reg scratch_reg, Reg heap_reg);
-              IOr (Reg scratch_reg, HexConst closure_tag);
-              IInstrComment
-                ( IMov (find_with_tag env lambda_tag name, Reg scratch_reg),
-                  sprintf "saving lambda %s" name ) ]
-            @ c_lam )
+            match StringSet.find_opt name fvs with
+            | Some _ ->
+                [ IMov (Reg scratch_reg, Reg heap_reg);
+                  IOr (Reg scratch_reg, HexConst closure_tag);
+                  IInstrComment
+                    ( IMov (find_with_tag env lambda_tag name, Reg scratch_reg),
+                      sprintf "saving lambda %s" name ) ]
+                @ c_lam
+            | None ->
+                c_lam
+                @ [ IInstrComment
+                      ( IMov (find_with_tag env lambda_tag name, Reg RAX),
+                        sprintf "saving lambda %s" name ) ] )
           binds
       in
       let compiled_body = compile_aexpr body env lambda_tag bound_lam_name in
@@ -1353,11 +1360,6 @@ and compile_cexpr
       IJe (Label "?err_nil_deref") ]
   in
   let check_closure (imm : arg) (dest : string) = check_tag imm closure_tag_mask closure_tag dest in
-  let save_and_restore_caller =
-    let pushes = List.map (fun x -> IPush (Reg x)) first_six_args_registers in
-    let pops = List.map (fun x -> IPop (Reg x)) (List.rev first_six_args_registers) in
-    (pushes, pops)
-  in
   let check_overflow = [IJo (Label "?err_overflow")] in
   match e with
   | CPrim1 (op, e, (_, tag)) -> (
