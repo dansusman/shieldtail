@@ -1751,8 +1751,6 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
   let prelude =
     "default rel\n\
      section .text\n\
-    "default rel\n\
-     section .text\n\
      extern ?error\n\
      extern input\n\
      extern ?print\n\
@@ -1826,7 +1824,6 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
               "by adding no more than 15 to it" ) ]
       in
       let set_stack_bottom =
-        [IMov (Reg R12, Reg RDI)]
         [IMov (Reg R12, Reg RDI)]
         @ native_call (Label "?set_stack_bottom") [Reg RBP]
         @ [IMov (Reg RDI, Reg R12)]
