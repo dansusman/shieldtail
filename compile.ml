@@ -111,21 +111,16 @@ let initial_fun_env =
 let rec find ls x =
   match ls with
   | [] -> raise (InternalCompilerError (sprintf "Name %s not found" (ExtLib.dump x)))
-  | (y, v) :: rest ->
-      if y = x then
-        v
-      else
-        find rest x
+  | (y, v) :: rest -> if y = x then v else find rest x
 ;;
 
 let rec find_with_tag ls t x =
   match ls with
   | [] -> raise (InternalCompilerError (sprintf "Name %s not found in tag env %d" x t))
   | (tag, named_env) :: rest ->
-      if tag = t then
-        try find named_env x with InternalCompilerError _ -> find_with_tag [] t x
-      else
-        find_with_tag rest t x
+      if tag = t
+      then try find named_env x with InternalCompilerError _ -> find_with_tag [] t x
+      else find_with_tag rest t x
 ;;
 
 let count_vars e =
@@ -145,12 +140,7 @@ let count_vars e =
   helpA e
 ;;
 
-let rec replicate x i =
-  if i = 0 then
-    []
-  else
-    x :: replicate x (i - 1)
-;;
+let rec replicate x i = if i = 0 then [] else x :: replicate x (i - 1)
 
 let align_size (n : int) = n + (n mod (word_size * 2))
 
@@ -158,10 +148,7 @@ let rec find_decl (ds : 'a decl list) (name : string) : 'a decl option =
   match ds with
   | [] -> None
   | (DFun (fname, _, _, _) as d) :: ds_rest ->
-      if name = fname then
-        Some d
-      else
-        find_decl ds_rest name
+      if name = fname then Some d else find_decl ds_rest name
 ;;
 
 let rec find_one (l : 'a list) (elt : 'a) : bool =
@@ -174,21 +161,13 @@ let rec find_dup (l : 'a list) : 'a option =
   match l with
   | [] -> None
   | [x] -> None
-  | x :: xs ->
-      if find_one xs x then
-        Some x
-      else
-        find_dup xs
+  | x :: xs -> if find_one xs x then Some x else find_dup xs
 ;;
 
 let rec find_opt (env : 'a name_envt) (elt : string) : 'a option =
   match env with
   | [] -> None
-  | (x, v) :: rst ->
-      if x = elt then
-        Some v
-      else
-        find_opt rst elt
+  | (x, v) :: rst -> if x = elt then Some v else find_opt rst elt
 ;;
 
 (* Prepends a list-like env onto an name_envt *)
@@ -201,10 +180,7 @@ let prepend env1 env2 =
     | [] -> env2
     | ((k, _) as fst) :: rst ->
         let rst_prepend = help rst env2 in
-        if List.mem_assoc k env2 then
-          rst_prepend
-        else
-          fst :: rst_prepend
+        if List.mem_assoc k env2 then rst_prepend else fst :: rst_prepend
   in
   help env1 env2
 ;;
@@ -226,15 +202,10 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
     | ENil _ -> []
     | EBool _ -> []
     | ENumber (n, loc) ->
-        if n > Int64.div Int64.max_int 2L || n < Int64.div Int64.min_int 2L then
-          [Overflow (n, loc)]
-        else
-          []
-    | EId (x, loc) ->
-        if find_one (List.map fst env) x then
-          []
-        else
-          [UnboundId (x, loc)]
+        if n > Int64.div Int64.max_int 2L || n < Int64.div Int64.min_int 2L
+        then [Overflow (n, loc)]
+        else []
+    | EId (x, loc) -> if find_one (List.map fst env) x then [] else [UnboundId (x, loc)]
     | EPrim1 (_, e, _) -> wf_E e env
     | EPrim2 (_, l, r, _) -> wf_E l env @ wf_E r env
     | EIf (c, t, f, _) -> wf_E c env @ wf_E t env @ wf_E f env
@@ -243,11 +214,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           match binds with
           | [] -> []
           | BBlank _ :: rest -> find_locs x rest
-          | BName (y, _, loc) :: rest ->
-              if x = y then
-                loc :: find_locs x rest
-              else
-                find_locs x rest
+          | BName (y, _, loc) :: rest -> if x = y then loc :: find_locs x rest else find_locs x rest
           | BTuple (binds, _) :: rest -> find_locs x binds @ find_locs x rest
         in
         let rec find_dupes (binds : 'a bind list) : exn list =
@@ -266,8 +233,8 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           | BTuple (binds, _) :: rest -> process_binds (binds @ rest) env
           | BName (x, allow_shadow, xloc) :: rest ->
               let shadow =
-                if allow_shadow then
-                  []
+                if allow_shadow
+                then []
                 else
                   match find_opt env x with
                   | None -> []
@@ -295,10 +262,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           match find_opt env funname with
           | Some (_, _, Some arg_arity) ->
               let actual = List.length args in
-              if actual != arg_arity then
-                [Arity (arg_arity, actual, loc)]
-              else
-                []
+              if actual != arg_arity then [Arity (arg_arity, actual, loc)] else []
           | _ -> [] )
         | _ -> [] )
         @ rec_errors
@@ -316,11 +280,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           match binds with
           | [] -> []
           | BBlank _ :: rest -> find_locs x rest
-          | BName (y, _, loc) :: rest ->
-              if x = y then
-                loc :: find_locs x rest
-              else
-                find_locs x rest
+          | BName (y, _, loc) :: rest -> if x = y then loc :: find_locs x rest else find_locs x rest
           | BTuple (binds, _) :: rest -> find_locs x binds @ find_locs x rest
         in
         let rec find_dupes (binds : 'a bind list) : exn list =
@@ -339,16 +299,13 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           | BTuple (binds, _) :: rest -> process_binds (binds @ rest) env
           | BName (x, allow_shadow, xloc) :: rest ->
               let shadow =
-                if allow_shadow then
-                  []
+                if allow_shadow
+                then []
                 else
                   match find_opt env x with
                   | None -> []
                   | Some (existing, _, _) ->
-                      if xloc = existing then
-                        []
-                      else
-                        [ShadowId (x, xloc, existing)]
+                      if xloc = existing then [] else [ShadowId (x, xloc, existing)]
               in
               let new_env = (x, (xloc, None, None)) :: env in
               let newer_env, errs = process_binds rest new_env in
@@ -622,9 +579,11 @@ let rec deepest_stack e env =
     | ImmBool _ -> 0
     | ImmId (name, _) -> name_to_offset name
   and name_to_offset name =
-    match find env name with
-    | RegOffset (bytes, RBP) -> bytes / (-1 * word_size) (* negative because stack direction *)
-    | _ -> 0
+    match find_opt env name with
+    | Some (RegOffset (bytes, RBP)) ->
+        bytes / (-1 * word_size) (* negative because stack direction *)
+    | Some _ -> raise (InternalCompilerError "All deepest_stack offsets should be from RBP.")
+    | None -> 0
   in
   max (helpA e) 0 (* if only parameters are used, helpA might return a negative value *)
 ;;
@@ -1145,23 +1104,18 @@ let min_unused_reg (used : arg list) : arg =
     match reg_priority with
     | [] ->
         let curr_height_offset = RegOffset (~-stack_height * word_size, RBP) in
-        if List.mem curr_height_offset used then
-          min_color_help reg_priority (stack_height + 1)
-        else
-          curr_height_offset
-    | to_try :: rest ->
-        if List.mem to_try used then
-          min_color_help rest stack_height
-        else
-          to_try
+        if List.mem curr_height_offset used
+        then min_color_help reg_priority (stack_height + 1)
+        else curr_height_offset
+    | to_try :: rest -> if List.mem to_try used then min_color_help rest stack_height else to_try
   in
   min_color_help reg_priority 1
 ;;
 
 let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
   let rec initialize_worklist (g : grapht) (worklist : string list) : string list =
-    if Graph.is_empty g then
-      worklist
+    if Graph.is_empty g
+    then worklist
     else
       let sorted_bindings =
         List.sort
@@ -1503,12 +1457,7 @@ and compile_cexpr
                ] )
              exprs )
       in
-      let padding =
-        if tup_size mod 2 == 0 then
-          word_size
-        else
-          0
-      in
+      let padding = if tup_size mod 2 == 0 then word_size else 0 in
       (* element count + (# elements * word_size) + {0 or word_size if even} *)
       let total_size = word_size + (tup_size * word_size) + padding in
       let create_tup_val =
@@ -1578,7 +1527,10 @@ and compile_cexpr
         List.sort compare (StringSet.elements fvs)
       in
       let num_frees = List.length frees in
-      let locals_space = deepest_stack body lam_env in
+      let locals_space =
+        try deepest_stack body lam_env
+        with InternalCompilerError _ -> raise (InternalCompilerError "AHA2")
+      in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
       let lambda_body =
@@ -1677,24 +1629,22 @@ and native_call label args =
   let num_stack_args = max (List.length args - 6) 0 in
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
-    ( if padding_needed then
-        [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-      else
-        [] )
+    ( if padding_needed
+    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+    else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
-    ( if num_stack_args = 0 then
-        []
-      else
-        [ IInstrComment
-            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-              sprintf "Popping %d arguments" num_stack_args ) ] )
-    @
-    if padding_needed then
-      [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
+    ( if num_stack_args = 0
+    then []
     else
-      []
+      [ IInstrComment
+          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+            sprintf "Popping %d arguments" num_stack_args ) ] )
+    @
+    if padding_needed
+    then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
+    else []
   in
   setup @ [ICall label] @ teardown
 
@@ -1711,8 +1661,8 @@ and call (closure : arg) args =
   in
   let pushSelf = [IInstrComment (IPush (Sized (QWORD_PTR, closure)), "push closure to stack")] in
   let teardown =
-    if arity = 0 then
-      []
+    if arity = 0
+    then []
     else
       [ IInstrComment
           ( IAdd (Reg RSP, Const (Int64.of_int (word_size * (arity + 1)))),
@@ -1834,12 +1784,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
 
-let run_if should_run f =
-  if should_run then
-    f
-  else
-    no_op_phase
-;;
+let run_if should_run f = if should_run then f else no_op_phase
 
 let pick_alloc_strategy (strat : alloc_strategy) =
   match strat with
