@@ -1089,7 +1089,25 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht 
           (Graph.singleton name StringSet.empty)
       in
       merge_two new_graph (interfere body (StringSet.add name live))
-  | ALetRec (binds, body, (fvs, _)) -> raise (NotYetImplemented "TODO")
+  | ALetRec (binds, body, (fvs, _)) ->
+      let xs, es = List.split binds in
+      let lam_free_vars =
+        List.fold_right
+          (fun ce prev_set -> StringSet.union (get_fv_info (ACExpr ce)) prev_set)
+          es StringSet.empty
+      in
+      let lam_interfering =
+        List.fold_right merge_two
+          (List.map (fun x ->
+          init_with_edges x (StringSet.of_list xs)) (StringSet.elements lam_free_vars) ) 
+          Graph.empty
+      in
+      let xs_interfering =
+        List.fold_right merge_two (List.map (fun x -> init_with_edges x (StringSet.of_list xs)) xs) Graph.empty
+      in
+      merge_two
+        (merge_two xs_interfering lam_interfering)
+        (interfere body (StringSet.union (StringSet.of_list xs) live))
   | ACExpr c_e -> help_C c_e
 ;;
 
@@ -1145,39 +1163,43 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
     (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-  let rec allocate_A (e : (StringSet.t * tag) aexpr) (in_use : arg list) : arg name_envt tag_envt =
+    (* TODO name not found in env - we need to add things to the right env, not just 0 *)
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) (lambda_tag : tag) : arg name_envt tag_envt =
     match e with
-    | ALet (name, value, body, _) ->
-        let value_env = allocate_C value in_use in
-        let body_env = allocate_A body in_use in
+    | ALet (_, value, body, _) ->
+        let value_env = allocate_C value lambda_tag in
+        let body_env = allocate_A body lambda_tag in
         value_env @ body_env
     | ASeq (f, s, _) ->
-        let f_env = allocate_C f in_use in
-        let s_env = allocate_A s in_use in
+        let f_env = allocate_C f lambda_tag in
+        let s_env = allocate_A s lambda_tag in
         f_env @ s_env
     | ALetRec (binds, body, _) ->
-        raise (NotYetImplemented "TODO")
-        (* let binds_env = List.concat_map allocate_C (List.map snd binds) in
-           let body_env = allocate_A body in
-           binds_env @ body_env *)
-    | ACExpr c -> allocate_C c in_use
-  and allocate_C (e : (StringSet.t * tag) cexpr) (in_use : arg list) : arg name_envt tag_envt =
+        (* TODO potential failure point *)
+        let _, values = List.split binds in
+        let binds_env = List.concat_map (fun v -> allocate_C v lambda_tag) values in
+        let body_env = allocate_A body lambda_tag in
+        binds_env @ body_env
+    | ACExpr c -> allocate_C c lambda_tag
+  and allocate_C (e : (StringSet.t * tag) cexpr) (lambda_tag : tag) : arg name_envt tag_envt =
     match e with
     | CIf (_, t, e, _) ->
-        let then_env = allocate_A t in_use in
-        let else_env = allocate_A e in_use in
+        let then_env = allocate_A t lambda_tag in
+        let else_env = allocate_A e lambda_tag in
         then_env @ else_env
     | CLambda (args, body, (fvs, tag)) ->
-        raise (NotYetImplemented "TODO")
-        (* let args_env = List.mapi (fun i a -> (a, RegOffset (i + 3, RBP))) args in
-           let body_env = allocate_A body in
-           (* TODO fill in current live environment properly *)
-           (tag, color_graph (interfere body StringSet.empty) []) :: body_env *)
+        (* TODO potential failure point *)
+        let args_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args in
+        let body_env = allocate_A body tag in
+        let body_graph = (interfere body fvs) in
+        let complete_graph = add_pairwise_edges body_graph fvs in
+        (* TODO fill in current live environment properly *)
+        (tag, color_graph complete_graph args_env) :: body_env
     | _ -> []
   in
   match prog with
   | AProgram (body, (_, tag)) ->
-      let body_env = allocate_A body [] in
+      let body_env = allocate_A body tag in
       (* let sorted_body_env =
            List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
          in *)
@@ -1301,7 +1323,6 @@ and compile_cexpr
       IMov (Reg scratch_reg, imm);
       ICmp (Reg RAX, Const tag);
       IJne (Label dest) ]
-    (* TODO: look at this ? *)
   in
   let check_num_tag (imm : arg) (dest : string) = check_tag imm num_tag_mask num_tag dest in
   let check_tup_tag (imm : arg) (dest : string) = check_tag imm tuple_tag_mask tuple_tag dest in
@@ -1515,6 +1536,7 @@ and compile_cexpr
       let c_args = List.map (fun a -> compile_imm a env lambda_tag) args in
       check_closure f_imm "?err_call_not_closure" @ call f_imm c_args
   | CLambda (args, body, (fvs, tag)) ->
+    (* TODO add pushes and pops for callee-save registers upon entering a function (maybe clear contents also) *)
       let lam_label = sprintf "$lam_%d_start" tag in
       let lam_done_label = sprintf "$lam_%d_end" tag in
       let lam_env = find env tag in
@@ -1551,23 +1573,9 @@ and compile_cexpr
         let postlude = [IMov (Reg RSP, Reg RBP); IPop (Reg RBP); IRet; ILabel lam_done_label] in
         [IPush (Reg RBP); IMov (Reg RBP, Reg RSP)]
         @ replicate (IPush (Sized (QWORD_PTR, Const 0L))) (locals_space + num_frees)
-          (* ISub (Reg RSP, Const (Int64.of_int (locals_space + (num_frees * word_size))))  *)
         @ loadSelf @ loadFrees @ c_body @ postlude
       in
       let closure_creation =
-        (* let preload_recursive =
-             let reg_to_init =
-               try Some (find_with_tag env lambda_tag bound_lam_name)
-               with InternalCompilerError _ -> None
-             in
-             match reg_to_init with
-             | Some reg_to_init ->
-                 [ IInstrComment
-                     (IMov (reg_to_init, Reg heap_reg), "\t\\ initialize recursive pointer reg");
-                   IInstrComment
-                     (IAdd (Sized (QWORD_PTR, reg_to_init), Const closure_tag), "/ and tag it") ]
-             | None -> []
-           in *)
         let load_closure_args =
           List.concat
             (List.mapi
@@ -1667,7 +1675,7 @@ and call (closure : arg) args =
           ( IAdd (Reg RSP, Const (Int64.of_int (word_size * (arity + 1)))),
             sprintf "Popping %d arguments" (arity + 1) ) ]
   in
-  setup @ arity_checks @ pass_args @ pushSelf @ [ICall (RegOffset (8, RAX))] @ teardown
+  setup @ arity_checks @ pass_args @ pushSelf @ [ICall (RegOffset (word_size, RAX))] @ teardown
 ;;
 
 (* This function can be used to take the native functions and produce DFuns whose bodies

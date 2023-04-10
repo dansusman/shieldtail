@@ -18,10 +18,7 @@ let merge_two (g1 : grapht) (g2 : grapht) : grapht =
 ;;
 
 let add_node (g : grapht) (name : string) : grapht =
-  if Graph.mem name g then
-    g
-  else
-    Graph.add name NeighborSet.empty g
+  if Graph.mem name g then g else Graph.add name NeighborSet.empty g
 ;;
 
 let add_directed_edge (g : grapht) (n1 : string) (n2 : string) : grapht =
@@ -31,18 +28,29 @@ let add_directed_edge (g : grapht) (n1 : string) (n2 : string) : grapht =
 ;;
 
 let add_edge (g : grapht) (n1 : string) (n2 : string) : grapht =
-  if n1 = n2 then
-    g
+  if n1 = n2
+  then g
   else
     let g' = add_directed_edge g n1 n2 in
     add_directed_edge g' n2 n1
 ;;
 
+let add_edges (g : grapht) (n : string) (others : neighborst) : grapht =
+  StringSet.fold (fun other prev_graph -> add_edge prev_graph n other) others g
+;;
+
+(* adds an edge between each node in the set to each other node *)
+let add_pairwise_edges (g : grapht) (nodes : neighborst) : grapht =
+  StringSet.fold (fun n prev_graph -> add_edges prev_graph n nodes) nodes g
+;;
+
+(* adds all of the others as neighbors of n and vice versa*)
+let init_with_edges (n : string) (others : neighborst) : grapht =
+  add_edges (Graph.singleton n StringSet.empty) n others
+;;
+
 let get_neighbors (g : grapht) (name : string) : string list =
-  if Graph.mem name g then
-    NeighborSet.fold (fun n ns -> n :: ns) (Graph.find name g) []
-  else
-    []
+  if Graph.mem name g then NeighborSet.fold (fun n ns -> n :: ns) (Graph.find name g) [] else []
 ;;
 
 let remove_neighbor (g : grapht) (from : string) (neighbor : string) : grapht =

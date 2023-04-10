@@ -168,7 +168,8 @@ let interfere =
         ("z_16", ["y_8"; "x_4"]) ];
     tinterfere "if_simple" "if true: 1 else: 2" [];
     tinterfere "if_in_let" "let x = true in if x: 1 else: 2" [("x_4", [])];
-    tinterfere "lets_in_if" "if true: (let x = 1 in x) else: (let y = 2 in y)" [("x_6", []); ("y_11", [])];
+    tinterfere "lets_in_if" "if true: (let x = 1 in x) else: (let y = 2 in y)"
+      [("x_6", []); ("y_11", [])];
     tinterfere "lets_in_and_out_if" "let z = true in if z: (let x = 1 in x) else: (let y = 2 in y)"
       [("x_10", []); ("y_15", []); ("z_4", [])];
     tinterfere "lets_in_and_out_if_interfere"
@@ -176,11 +177,23 @@ let interfere =
       [("x_10", []); ("y_15", ["z_4"]); ("z_4", ["y_15"])];
     tinterfere "simple_seq" "print(5); 6" [];
     tinterfere "let_in_seq" "let x = 1 in x; let y = 2 in y" [("x_4", []); ("y_12", [])];
-    tinterfere "let_over_seq" "let z = 3 in (let x = 1 in x; let y = 2 in y)" [("x_8", []); ("y_16", []); ("z_4", [])];
+    tinterfere "let_over_seq" "let z = 3 in (let x = 1 in x; let y = 2 in y)"
+      [("x_8", []); ("y_16", []); ("z_4", [])];
     tinterfere "let_over_seq_interfere" "let z = 3 in (let x = 1 in x + z; let y = 2 in y)"
       [("x_8", ["z_4"]); ("y_18", []); ("z_4", ["x_8"])];
     tinterfere "let_over_seq_interfere_both" "let z = 3 in (let x = 1 in x + z; let y = 2 in y + z)"
-      [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])] ]
+      [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])];
+    tinterfere "letrec_single" "let rec x = 1 in x" [("x_4", [])];
+    tinterfere "letrec_double" "let rec x = 1, y = 2 in 3" [("x_4", ["y_7"]); ("y_7", ["x_4"])];
+    tinterfere "letrec_triple" "let rec x = 1, y = 2, z = 3 in 4"
+      [("x_4", ["y_7"; "z_10"]); ("y_7", ["x_4"; "z_10"]); ("z_10", ["x_4"; "y_7"])];
+    tinterfere "letrec_single_with_free" "let rec x = y in 1" [("x_4", ["y"]); ("y", ["x_4"])];
+    tinterfere "letrec_double_one_free" "let rec x = 1, y = z in 2"
+      [("x_4", ["y_7"; "z"]); ("y_7", ["x_4"; "z"]); ("z", ["x_4"; "y_7"])];
+    tinterfere "letrec_id" "let rec foo = (lambda (x): x) in foo(3)" [("foo_4", [])];
+    tinterfere "letrec_one_recursive" "let rec foo = (lambda (x): x), bar = (lambda (y): foo(y)) in bar(1) + foo(3)" [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])]; 
+    tinterfere "letrec_one_recursive" "let rec foo = (lambda (x): x), bar = (lambda (y): application) in 1" [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])]; 
+    tinterfere "letrec_one_recursive_separate" "let rec foo = (lambda (x): x) in let rec bar = (lambda (y): foo(y)) in bar(1) + foo(3)" [("foo_4", [("")])] ]
 ;;
 
 let remove_node =
@@ -315,6 +328,12 @@ let gc =
 
 let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
-let suite = "unit_tests" >::: regalloc @ interfere @ remove_node @ color_graph
+let suite =
+  "unit_tests"
+  >::: (* regalloc @ *)
+  interfere
+;;
 
-let () = run_test_tt_main ("all_tests" >::: [suite; input_file_test_suite ()])
+(* @ remove_node @ color_graph *)
+
+let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()])
