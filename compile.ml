@@ -1069,45 +1069,44 @@ let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) :
       (prog, group_tags sorted_body_env)
 ;;
 
-let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) : grapht =
+let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) (delete : StringSet.t) :
+    grapht =
   let rec help_C (c_e : (StringSet.t * tag) cexpr) : grapht =
     match c_e with
-    | CIf (c, t, e, (fvs, _)) -> merge_two (interfere t live) (interfere e live)
-    | CLambda _ -> raise (NotYetImplemented "TODO")
+    | CIf (c, t, e, (fvs, _)) -> merge_two (interfere t live delete) (interfere e live delete)
     | _ -> Graph.empty
   in
   match e with
-  | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live)
+  | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live delete)
   | ALet (name, bound, body, (fvs, _)) ->
-      let body_free = StringSet.elements (get_fv_info body) in
-      (* let bound_interfere = help_C bound in *)
+      let interf_stuff = StringSet.elements (StringSet.union (StringSet.diff fvs delete) live) in
+      let bound_interfere = help_C bound in
       let new_graph =
         List.fold_right
           (fun fv prev_graph -> add_edge prev_graph name fv)
-          body_free
+          interf_stuff
           (* every bound name should be added as a node so a register is given to it *)
-          (Graph.singleton name StringSet.empty)
+          (add_node bound_interfere name)
       in
-      merge_two new_graph (interfere body (StringSet.add name live))
+      merge_two new_graph (interfere body (StringSet.add name live) delete)
   | ALetRec (binds, body, (fvs, _)) ->
       let xs, es = List.split binds in
       let lam_free_vars =
-        List.fold_right
-          (fun ce prev_set -> StringSet.union (get_fv_info (ACExpr ce)) prev_set)
-          es StringSet.empty
+        StringSet.diff
+          (List.fold_right
+             (fun ce prev_set -> StringSet.union (get_fv_info (ACExpr ce)) prev_set)
+             es StringSet.empty )
+          delete
       in
-      let lam_interfering =
-        List.fold_right merge_two
-          (List.map (fun x ->
-          init_with_edges x (StringSet.of_list xs)) (StringSet.elements lam_free_vars) ) 
-          Graph.empty
+      let new_graph =
+        List.fold_left
+          (fun prev_graph name ->
+            StringSet.fold (fun n graph -> add_edge graph n name) lam_free_vars prev_graph )
+          Graph.empty xs
       in
-      let xs_interfering =
-        List.fold_right merge_two (List.map (fun x -> init_with_edges x (StringSet.of_list xs)) xs) Graph.empty
-      in
-      merge_two
-        (merge_two xs_interfering lam_interfering)
-        (interfere body (StringSet.union (StringSet.of_list xs) live))
+      let new_live = StringSet.union (StringSet.of_list xs) live in
+      let paired = add_pairwise_edges new_graph new_live in
+      merge_two paired (interfere body new_live delete)
   | ACExpr c_e -> help_C c_e
 ;;
 
@@ -1163,48 +1162,42 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
     (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-    (* TODO name not found in env - we need to add things to the right env, not just 0 *)
-  let rec allocate_A (e : (StringSet.t * tag) aexpr) (lambda_tag : tag) : arg name_envt tag_envt =
+  (* TODO name not found in env - we need to add things to the right env, not just 0 *)
+  let rec allocate_A (e : (StringSet.t * tag) aexpr) : arg name_envt tag_envt =
     match e with
     | ALet (_, value, body, _) ->
-        let value_env = allocate_C value lambda_tag in
-        let body_env = allocate_A body lambda_tag in
+        let value_env = allocate_C value in
+        let body_env = allocate_A body in
         value_env @ body_env
     | ASeq (f, s, _) ->
-        let f_env = allocate_C f lambda_tag in
-        let s_env = allocate_A s lambda_tag in
+        let f_env = allocate_C f in
+        let s_env = allocate_A s in
         f_env @ s_env
     | ALetRec (binds, body, _) ->
         (* TODO potential failure point *)
-        let _, values = List.split binds in
-        let binds_env = List.concat_map (fun v -> allocate_C v lambda_tag) values in
-        let body_env = allocate_A body lambda_tag in
+        let binds_env = List.concat_map (fun (_, v) -> allocate_C v) binds in
+        let body_env = allocate_A body in
         binds_env @ body_env
-    | ACExpr c -> allocate_C c lambda_tag
-  and allocate_C (e : (StringSet.t * tag) cexpr) (lambda_tag : tag) : arg name_envt tag_envt =
+    | ACExpr c -> allocate_C c
+  and allocate_C (e : (StringSet.t * tag) cexpr) : arg name_envt tag_envt =
     match e with
     | CIf (_, t, e, _) ->
-        let then_env = allocate_A t lambda_tag in
-        let else_env = allocate_A e lambda_tag in
+        let then_env = allocate_A t in
+        let else_env = allocate_A e in
         then_env @ else_env
     | CLambda (args, body, (fvs, tag)) ->
-        (* TODO potential failure point *)
         let args_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args in
-        let body_env = allocate_A body tag in
-        let body_graph = (interfere body fvs) in
+        let body_env = allocate_A body in
+        let body_graph = interfere body fvs (StringSet.of_list args) in
         let complete_graph = add_pairwise_edges body_graph fvs in
-        (* TODO fill in current live environment properly *)
         (tag, color_graph complete_graph args_env) :: body_env
     | _ -> []
   in
   match prog with
   | AProgram (body, (_, tag)) ->
-      let body_env = allocate_A body tag in
-      (* let sorted_body_env =
-           List.sort (fun (tag1, _) (tag2, _) -> compare tag1 tag2) ((tag, []) :: body_env)
-         in *)
+      let body_env = allocate_A body in
       (* TODO maybe include natives in initial environment (in_use too?) *)
-      (prog, (tag, color_graph (interfere body StringSet.empty) []) :: body_env)
+      (prog, (tag, color_graph (interfere body StringSet.empty StringSet.empty) []) :: body_env)
 ;;
 
 let count_vars e =
@@ -1536,7 +1529,7 @@ and compile_cexpr
       let c_args = List.map (fun a -> compile_imm a env lambda_tag) args in
       check_closure f_imm "?err_call_not_closure" @ call f_imm c_args
   | CLambda (args, body, (fvs, tag)) ->
-    (* TODO add pushes and pops for callee-save registers upon entering a function (maybe clear contents also) *)
+      (* TODO add pushes and pops for callee-save registers upon entering a function (maybe clear contents also) *)
       let lam_label = sprintf "$lam_%d_start" tag in
       let lam_done_label = sprintf "$lam_%d_end" tag in
       let lam_env = find env tag in

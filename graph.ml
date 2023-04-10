@@ -41,7 +41,8 @@ let add_edges (g : grapht) (n : string) (others : neighborst) : grapht =
 
 (* adds an edge between each node in the set to each other node *)
 let add_pairwise_edges (g : grapht) (nodes : neighborst) : grapht =
-  StringSet.fold (fun n prev_graph -> add_edges prev_graph n nodes) nodes g
+  let new_graph = StringSet.fold (fun prev_graph n -> add_node n prev_graph) nodes g in
+  StringSet.fold (fun n prev_graph -> add_edges prev_graph n nodes) nodes new_graph
 ;;
 
 (* adds all of the others as neighbors of n and vice versa*)
@@ -74,4 +75,19 @@ let string_of_graph (g : grapht) : string =
   let string_of_neighbors (n : string) : string = ExtString.String.join ", " (get_neighbors g n) in
   ExtString.String.join "\n"
     (List.map (fun k -> sprintf "%s: %s" k (string_of_neighbors k)) (get_vertices g))
+;;
+
+let graph_to_viz (g : grapht) : string =
+  let prefix = "digraph G { \n" in
+  let suffix = "}\n" in
+  let nodes = ExtString.String.join "\n" (List.map (fun k -> sprintf "%s" k) (get_vertices g)) in
+  let edges =
+    ExtString.String.join "\n"
+      (List.map
+         (fun k ->
+           ExtString.String.join "\n"
+             (List.map (fun n -> sprintf "%s -> %s" k n) (get_neighbors g k)) )
+         (get_vertices g) )
+  in
+  prefix ^ nodes ^ edges ^ suffix
 ;;

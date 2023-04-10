@@ -86,13 +86,21 @@ let t_graph name value expected =
     (string_of_graph value) ~printer:quoted_str
 ;;
 
+let t_viz_graph name value expected =
+  name
+  >:: fun _ ->
+  assert_equal
+    (graph_to_viz (graph_from_assoc_list expected))
+    (graph_to_viz value) ~printer:quoted_str
+;;
+
 let tinterfere name program expected =
   let (AProgram (body, _)) =
     free_vars_cache (atag (anf (rename_and_tag (tag (desugar (parse_string name program))))))
   in
   t_string name
-    (string_of_graph (interfere body StringSet.empty))
-    (string_of_graph (graph_from_assoc_list expected))
+    (graph_to_viz (interfere body StringSet.empty StringSet.empty))
+    (graph_to_viz (graph_from_assoc_list expected))
 ;;
 
 let talloc name program expected =
@@ -191,9 +199,15 @@ let interfere =
     tinterfere "letrec_double_one_free" "let rec x = 1, y = z in 2"
       [("x_4", ["y_7"; "z"]); ("y_7", ["x_4"; "z"]); ("z", ["x_4"; "y_7"])];
     tinterfere "letrec_id" "let rec foo = (lambda (x): x) in foo(3)" [("foo_4", [])];
-    tinterfere "letrec_one_recursive" "let rec foo = (lambda (x): x), bar = (lambda (y): foo(y)) in bar(1) + foo(3)" [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])]; 
-    tinterfere "letrec_one_recursive" "let rec foo = (lambda (x): x), bar = (lambda (y): application) in 1" [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])]; 
-    tinterfere "letrec_one_recursive_separate" "let rec foo = (lambda (x): x) in let rec bar = (lambda (y): foo(y)) in bar(1) + foo(3)" [("foo_4", [("")])] ]
+    tinterfere "letrec_recursive"
+      "let rec foo = (lambda (x): x), bar = (lambda (y): foo(y)) in bar(1) + foo(3)"
+      [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])];
+    tinterfere "letrec_simple_body"
+      "let rec foo = (lambda (x): x), bar = (lambda (y): application) in 1"
+      [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])];
+    tinterfere "letrec_recursive_nest"
+      "let rec foo = (lambda (x): x) in let rec bar = (lambda (y): foo(y)) in bar(1) + foo(3)"
+      [("foo_4", [""])] ]
 ;;
 
 let remove_node =
@@ -325,6 +339,8 @@ let gc =
       \         f()\n\
       \       end" "" "(1, 2)" ]
 ;;
+
+let viz_tests = [t_viz_graph]
 
 let input = [t "input1" "let x = input() in x + 2" "123" "125"]
 
