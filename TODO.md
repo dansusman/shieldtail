@@ -1,4 +1,4 @@
--   [ ] free_vars_cache
+-   [x] free_vars_cache
 -   [x] interfere
 -   [x] color_graph
 -   [ ] gc

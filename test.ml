@@ -74,7 +74,7 @@ let tfvsc name program expected =
   (* let c = Stdlib.compare in *)
   let print_tags (fvs, tag) =
     " (["
-    ^ List.fold_left (fun fv prev_string -> fv ^ "," ^ prev_string) "" fvs
+    ^ List.fold_left (fun fv prev_string -> fv ^ " " ^ prev_string) "" fvs
     ^ "]" ^ sprintf ", %d" tag ^ ")"
   in
   (* let print_aprog p = string_of_aprogram p in *)
@@ -213,6 +213,219 @@ let free_vars_suite =
          tfvs "letrec_self_recurse_if" "let rec f = (lambda : if 1 < 2: 1 else: f()) in f()" [];
          tfvs "fact" "let rec fact = (lambda (n): if n <= 1: 1 else: n * fact(sub1(n))) in fact" []
        ]
+;;
+
+let fvc_suite =
+  "fvc_suite"
+  >::: [ tfvsc "num" "1" (AProgram (ACExpr (CImmExpr (ImmNum (1L, ([], 1)))), ([], 0)));
+         tfvsc "bool" "false" (AProgram (ACExpr (CImmExpr (ImmBool (false, ([], 1)))), ([], 0)));
+         tfvsc "id" "x" (AProgram (ACExpr (CImmExpr (ImmId ("x", (["x"], 1)))), (["x"], 0)));
+         tfvsc "capp_closed" "fun(1, 2, 3)"
+           (AProgram
+              ( ACExpr
+                  (CApp
+                     ( ImmId ("fun", (["fun"], 5)),
+                       [ImmNum (1L, ([], 2)); ImmNum (2L, ([], 3)); ImmNum (3L, ([], 4))],
+                       Unknown,
+                       (["fun"], 1) ) ),
+                (["fun"], 0) ) );
+         tfvsc "capp_frees" "fun((x + y), z)"
+           (AProgram
+              ( ALet
+                  ( "binop_3",
+                    CPrim2 (Plus, ImmId ("x", (["x"], 8)), ImmId ("y", (["y"], 7)), (["x"; "y"], 6)),
+                    ACExpr
+                      (CApp
+                         ( ImmId ("fun", (["fun"], 5)),
+                           [ImmId ("binop_3", (["binop_3"], 3)); ImmId ("z", (["z"], 4))],
+                           Unknown,
+                           (["binop_3"; "fun"; "z"], 2) ) ),
+                    (["fun"; "x"; "y"; "z"], 1) ),
+                (["fun"; "x"; "y"; "z"], 0) ) );
+         tfvsc "if_closed" "if true: 100 else: 200"
+           (AProgram
+              ( ACExpr
+                  (CIf
+                     ( ImmBool (true, ([], 4)),
+                       ACExpr (CImmExpr (ImmNum (100L, ([], 3)))),
+                       ACExpr (CImmExpr (ImmNum (200L, ([], 2)))),
+                       ([], 1) ) ),
+                ([], 0) ) );
+         tfvsc "if_frees" "if a: b else: c"
+           (AProgram
+              ( ACExpr
+                  (CIf
+                     ( ImmId ("a", (["a"], 4)),
+                       ACExpr (CImmExpr (ImmId ("b", (["b"], 3)))),
+                       ACExpr (CImmExpr (ImmId ("c", (["c"], 2)))),
+                       (["c"], 1) ) ),
+                (["a"; "b"; "c"], 0) ) );
+         tfvsc "prim1_closed" "add1(100)"
+           (AProgram (ACExpr (CPrim1 (Add1, ImmNum (100L, ([], 2)), ([], 1))), ([], 0)));
+         tfvsc "prim1_free" "add1(x)"
+           (AProgram (ACExpr (CPrim1 (Add1, ImmId ("x", (["x"], 2)), (["x"], 1))), (["x"], 0)));
+         tfvsc "prim2_nest" "(a + b) * (c + d)"
+           (AProgram
+              ( ALet
+                  ( "binop_3",
+                    CPrim2
+                      (Plus, ImmId ("a", (["a"], 11)), ImmId ("b", (["b"], 10)), (["a"; "b"], 9)),
+                    ALet
+                      ( "binop_6",
+                        CPrim2
+                          (Plus, ImmId ("c", (["c"], 8)), ImmId ("d", (["d"], 7)), (["c"; "d"], 6)),
+                        ACExpr
+                          (CPrim2
+                             ( Times,
+                               ImmId ("binop_3", (["binop_3"], 5)),
+                               ImmId ("binop_6", (["binop_6"], 4)),
+                               (["binop_3"; "binop_6"], 3) ) ),
+                        (["binop_3"; "c"; "d"], 2) ),
+                    (["a"; "b"; "c"; "d"], 1) ),
+                (["a"; "b"; "c"; "d"], 0) ) );
+         tfvsc "lam_closed" "(lambda (x, y): x + y)"
+           (AProgram
+              ( ACExpr
+                  (CLambda
+                     ( ["x"; "y"],
+                       ACExpr
+                         (CPrim2
+                            (Plus, ImmId ("x", (["x"], 4)), ImmId ("y", (["y"], 3)), (["x"; "y"], 2))
+                         ),
+                       ([], 1) ) ),
+                ([], 0) ) );
+         tfvsc "lam_one_free" "(lambda (x, y): x + y + z)"
+           (AProgram
+              ( ACExpr
+                  (CLambda
+                     ( ["x"; "y"],
+                       ALet
+                         ( "binop_6",
+                           CPrim2
+                             ( Plus,
+                               ImmId ("x", (["x"], 8)),
+                               ImmId ("y", (["y"], 7)),
+                               (["x"; "y"], 6) ),
+                           ACExpr
+                             (CPrim2
+                                ( Plus,
+                                  ImmId ("binop_6", (["binop_6"], 5)),
+                                  ImmId ("z", (["z"], 4)),
+                                  (["binop_6"; "z"], 3) ) ),
+                           (["x"; "y"; "z"], 2) ),
+                       (["z"], 1) ) ),
+                (["z"], 0) ) );
+         tfvsc "lam_all_free" "(lambda: a + b)"
+           (AProgram
+              ( ACExpr
+                  (CLambda
+                     ( [],
+                       ACExpr
+                         (CPrim2
+                            (Plus, ImmId ("a", (["a"], 4)), ImmId ("b", (["b"], 3)), (["a"; "b"], 2))
+                         ),
+                       (["a"; "b"], 1) ) ),
+                (["a"; "b"], 0) ) );
+         tfvsc "tuple_frees" "(x, y, (z), 1, 2)"
+           (AProgram
+              ( ACExpr
+                  (CTuple
+                     ( [ ImmId ("x", (["x"], 2));
+                         ImmId ("y", (["y"], 3));
+                         ImmId ("z", (["z"], 4));
+                         ImmNum (1L, ([], 5));
+                         ImmNum (2L, ([], 6)) ],
+                       (["x"; "y"; "z"], 1) ) ),
+                (["x"; "y"; "z"], 0) ) );
+         tfvsc "let_closed" "let x = 1, y = 2 in x + y"
+           (AProgram
+              ( ALet
+                  ( "x",
+                    CImmExpr (ImmNum (1L, ([], 7))),
+                    ALet
+                      ( "y",
+                        CImmExpr (ImmNum (2L, ([], 6))),
+                        ACExpr
+                          (CPrim2
+                             ( Plus,
+                               ImmId ("x", (["x"], 5)),
+                               ImmId ("y", (["y"], 4)),
+                               (["x"; "y"], 3) ) ),
+                        (["x"], 2) ),
+                    ([], 1) ),
+                ([], 0) ) );
+         tfvsc "let_free" "let x = y, z = 10 in x + y + z + q"
+           (AProgram
+              ( ALet
+                  ( "x",
+                    CImmExpr (ImmId ("y", (["y"], 15))),
+                    ALet
+                      ( "z",
+                        CImmExpr (ImmNum (10L, ([], 14))),
+                        ALet
+                          ( "binop_12",
+                            CPrim2
+                              ( Plus,
+                                ImmId ("x", (["x"], 13)),
+                                ImmId ("y", (["y"], 12)),
+                                (["x"; "y"], 11) ),
+                            ALet
+                              ( "binop_11",
+                                CPrim2
+                                  ( Plus,
+                                    ImmId ("binop_12", (["binop_12"], 10)),
+                                    ImmId ("z", (["z"], 9)),
+                                    (["binop_12"; "z"], 8) ),
+                                ACExpr
+                                  (CPrim2
+                                     ( Plus,
+                                       ImmId ("binop_11", (["binop_11"], 7)),
+                                       ImmId ("q", (["q"], 6)),
+                                       (["binop_11"; "q"], 5) ) ),
+                                (["binop_12"; "q"; "z"], 4) ),
+                            (["q"; "x"; "y"; "z"], 3) ),
+                        (["q"; "x"; "y"], 2) ),
+                    (["q"; "y"], 1) ),
+                (["q"; "y"], 0) ) );
+         tfvsc "lets_lams" "let x = 10, foo = (lambda (y): x + y) in foo(100)"
+           (AProgram
+              ( ALet
+                  ( "x",
+                    CImmExpr (ImmNum (10L, ([], 10))),
+                    ALet
+                      ( "foo",
+                        CLambda
+                          ( ["y"],
+                            ACExpr
+                              (CPrim2
+                                 ( Plus,
+                                   ImmId ("x", (["x"], 9)),
+                                   ImmId ("y", (["y"], 8)),
+                                   (["x"; "y"], 7) ) ),
+                            (["x"], 6) ),
+                        ACExpr
+                          (CApp
+                             (ImmId ("foo", (["foo"], 5)), [ImmNum (100L, ([], 4))], Unknown, (["foo"], 3))
+                          ),
+                        (["x"], 2) ),
+                    ([], 1) ),
+                ([], 0) ) );
+         tfvsc "seq_frees" "let x = y in x; y + z"
+           (AProgram
+              ( ALet
+                  ( "x",
+                    CImmExpr (ImmId ("y", (["y"], 7))),
+                    ASeq
+                      ( CImmExpr (ImmId ("x", (["x"], 6))),
+                        ACExpr
+                          (CPrim2
+                             ( Plus,
+                               ImmId ("y", (["y"], 5)),
+                               ImmId ("z", (["z"], 4)),
+                               (["y"; "z"], 3) ) ),
+                        (["x"; "y"; "z"], 2) ),
+                    (["y"; "z"], 1) ),
+                (["y"; "z"], 0) ) ) ]
 ;;
 
 let reg_alloc_suite =
@@ -513,11 +726,12 @@ let () =
   run_test_tt_main
     ( "all_tests"
     >::: [ (* free_vars_suite; *)
+           fvc_suite
            (* gc_suite; *)
            (* pipeline_suite;
               graph_suite; *)
            (* interfere_suite; *)
-           color_graph_suite ] )
+           (* color_graph_suite *) ] )
 ;;
 
 (* let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()]) *)
