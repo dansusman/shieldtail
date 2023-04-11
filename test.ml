@@ -430,6 +430,8 @@ let fvc_suite =
                 (["y"; "z"], 0) ) ) ]
 ;;
 
+let naive_alloc_suite = "naive_alloc_suite" >::: []
+
 let reg_alloc_suite =
   "reg_alloc_suite"
   >::: [ tregalloc "num" "3" [(0, [])];
@@ -732,6 +734,8 @@ let () =
            pipeline_suite;
            graph_suite;
            interfere_suite;
+           reg_alloc_suite;
+           naive_alloc_suite;
            gc_suite;
            color_graph_suite ] )
 ;;

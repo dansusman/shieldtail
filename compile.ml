@@ -1126,8 +1126,6 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) (delete :
 ;;
 
 let min_unused_reg (used : arg list) : arg =
-  (* TODO make sure to push and pop native call regs if needed *)
-  (* NOTE: excluding R11 because it's our scratch_reg *)
   let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
     match reg_priority with
     | [] ->
@@ -1174,7 +1172,6 @@ let color_graph (g : grapht) (init_env : arg name_envt) : arg name_envt =
 
 let register_allocation (prog : (StringSet.t * tag) aprogram) :
     (StringSet.t * tag) aprogram * arg name_envt tag_envt =
-  (* TODO name not found in env - we need to add things to the right env, not just 0 *)
   let rec allocate_A (e : (StringSet.t * tag) aexpr) : arg name_envt tag_envt =
     match e with
     | ALet (_, value, body, _) ->
@@ -1186,7 +1183,6 @@ let register_allocation (prog : (StringSet.t * tag) aprogram) :
         let s_env = allocate_A s in
         f_env @ s_env
     | ALetRec (binds, body, _) ->
-        (* TODO potential failure point *)
         let binds_env = List.concat_map (fun (_, v) -> allocate_C v) binds in
         let body_env = allocate_A body in
         binds_env @ body_env
@@ -1208,7 +1204,6 @@ let register_allocation (prog : (StringSet.t * tag) aprogram) :
   match prog with
   | AProgram (body, (_, tag)) ->
       let body_env = allocate_A body in
-      (* TODO maybe include natives in initial environment (in_use too?) *)
       (prog, (tag, color_graph (interfere body StringSet.empty StringSet.empty) []) :: body_env)
 ;;
 
@@ -1399,7 +1394,6 @@ and compile_cexpr
       in
       match op with
       | Plus ->
-          (* TODO maybe cleanup *)
           check_num_tag c_left "?err_arith_not_num"
           @ check_num_tag c_right "?err_arith_not_num"
           @ [ IMov (Reg RAX, c_left);
@@ -1468,7 +1462,6 @@ and compile_cexpr
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
   | CTuple (exprs, (_, tag)) ->
-      (* TODO: change manual padding creation and total_size calculation to use align_size (test for regressions) *)
       let tup_size = List.length exprs in
       let store_length =
         [IMov (Sized (QWORD_PTR, RegOffset (0, heap_reg)), Const (Int64.of_int (tup_size lsl 1)))]
@@ -1541,22 +1534,17 @@ and compile_cexpr
       let c_args = List.map (fun a -> compile_imm a env lambda_tag) args in
       check_closure f_imm "?err_call_not_closure" @ call f_imm c_args
   | CLambda (args, body, (fvs, tag)) ->
-      (* TODO add pushes and pops for callee-save registers upon entering a function (maybe clear contents also) *)
       let lam_label = sprintf "$lam_%d_start" tag in
       let lam_done_label = sprintf "$lam_%d_end" tag in
       let lam_env = find env tag in
       let arity = List.length args in
       let frees =
-        (* TODO Lerner's code does not have recursive function name in free*)
         (* List.sort compare
            (free_vars (ALetRec ([(bound_lam_name, e)], ACExpr (CImmExpr (ImmNum (-1L, tag))), tag))) *)
         List.sort compare (StringSet.elements fvs)
       in
       let num_frees = List.length frees in
-      let locals_space =
-        try deepest_stack body lam_env
-        with InternalCompilerError _ -> raise (InternalCompilerError "AHA2")
-      in
+      let locals_space = deepest_stack body lam_env in
       let c_body = compile_aexpr body env tag bound_lam_name in
       let total_size = align_size ((3 + num_frees) * word_size) in
       let lambda_body =

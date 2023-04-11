@@ -2,7 +2,6 @@ open Printf
 open Exprs
 open Pretty
 
-(* TODO: Define any additional exceptions you want *)
 exception ParseError of string (* parse-error message *)
 
 exception UnboundId of string * sourcespan (* name, where used *)
