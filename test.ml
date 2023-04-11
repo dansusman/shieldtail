@@ -9,13 +9,15 @@ open Errors
 open Graph
 open Assembly
 
-let alloc_strat = Naive
+let alloc_strat = Register
 
 let t ?(alloc = alloc_strat) name program input expected =
   name >:: test_run ~args:[] ~std_input:input alloc program name expected
 ;;
 
-let te name program expected_err = name >:: test_err Naive program name expected_err
+let te ?(alloc = alloc_strat) name program expected_err =
+  name >:: test_err alloc program name expected_err
+;;
 
 let t_error name error thunk = name >:: fun _ -> assert_raises error thunk
 
@@ -1828,6 +1830,46 @@ let integration_test_suite =
        @ input_tests
 ;;
 
+let lambda_suite =
+  "lambda_suite"
+  >::: [ t "identity" "(lambda (x): x)" "" "function with arity=1";
+         t "lam_three" "(lambda (x, y, z): x + y + z)" "" "function with arity=3";
+         t "nullary" "(lambda : 1)" "" "function with arity=0";
+         t "print" "print((lambda (x): x));6" "" "function with arity=1";
+         t "letrec_nonrec" "let rec f = (lambda (x): x) in f(44)" "" "44";
+         t "factorial" "let rec fact = (lambda (n): if n == 1: 1 else: n * fact(n - 1)) in fact(5)"
+           "" "120";
+         t "nest_two" "(lambda (x): x + (lambda (y): y)(5))(4)" "" "9";
+         t "nest_many" "(lambda (x): (lambda (y): (lambda (z): x + y + z)))" ""
+           "function with arity=1";
+         t "nest_lam"
+           "(lambda (x): (lambda (x): (lambda (y): y + x)(5) + (lambda (y): y + x)(5))(4) + \
+            (lambda (x): (lambda (y): y + x)(5) + (lambda (y): y + x)(5))(4))(4)"
+           "" "36";
+         t "free_nest" "let y = 3 in (lambda (x): x + y)" "" "function with arity=1";
+         t "null_app" "(lambda : 1)()" "" "1";
+         te "app_non_lam" "(4 + 2)(3)" "tried to call a non-closure value";
+         t "lam_application" "(lambda (x): x)(56)" "" "56";
+         t "tup_lam" "let t = (1, 2, 3) in (lambda ((x, y ,z)): x + y + z)(t)" "" "6";
+         t "many_args_app" "(lambda (w, x, y, z): w + x + y + z)(1, 2, 3, 4)" "" "10";
+         t "many_args_2" "(lambda (w, x, y, z): w + x + y)(1, 2, 3, 4)" "" "6";
+         t "free_y" "let x = 5, f = (lambda (y): x + y) in f(4)" "" "9";
+         t "two_frees" "let x = 5, f = (lambda (y, z): x + y + z) in f(4, 5)" "" "14";
+         t "lambda_in_lambda_mulargs"
+           "(lambda (x, y): x + y + (lambda (i, j, k): i + j + k)(5, 3, 2))(4, 1)" "" "15";
+         t "prim2_with_lam" "(lambda (x): x + 2)(5) * (lambda (x): x + 1)(5)" "" "42";
+         t "currying" "let foo = (lambda (x): (lambda (y): x + y)) in foo(1)(44)" "" "45";
+         t "printing" "let f = (lambda : print(1)) in f(); f()" "" "1\n1\n1";
+         t "input" "let foo = (lambda : input()) in foo() + foo()" "1\n2" "3";
+         t "letrec_nest_lam"
+           "let rec f = (lambda (x): let rec h = (lambda (k): x + k) in let rec g = (lambda (y): y \
+            + h(y)) in g(x)) in f(4)"
+           "" "12";
+         t "tuple_comprise_lams"
+           "let t = ((lambda (x): x + 1), (lambda (x): x * 3)) in t[0](4) + t[1](4) " "" "17";
+         t "tup_app_lam" "let t = ((lambda (x): x), (lambda (y): y)) in t[0](3) + t[1](2)" "" "5" ]
+;;
+
 let () =
   run_test_tt_main
     ( "all_tests"
@@ -1842,7 +1884,6 @@ let () =
            (* compile_cexpr_suite; *)
            integration_test_suite;
            (* gc_suite; *)
+           lambda_suite;
            color_graph_suite (* input_file_test_suite () *) ] )
 ;;
-
-(* let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()]) *)

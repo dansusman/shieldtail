@@ -3,6 +3,6 @@
 -   [x] color_graph
 -   [ ] gc
 -   [ ] input files
--   [ ] move in compile tests
+-   [x] move in compile tests
 -   [ ] new reg compilation
 -   [x] reg alloc unit tests

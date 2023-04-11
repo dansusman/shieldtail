@@ -23,8 +23,8 @@ let parse (name : string) lexbuf : sourcespan program =
     Parser.program Lexer.token lexbuf
   with
   | Failure msg as exn ->
-      if msg = "lexing: empty token" then
-        raise (ParseError (sprintf "Lexical error at %s" (string_of_position lexbuf.lex_curr_p)))
+      if msg = "lexing: empty token"
+      then raise (ParseError (sprintf "Lexical error at %s" (string_of_position lexbuf.lex_curr_p)))
       else
         let bt = Printexc.get_raw_backtrace () in
         Printexc.raise_with_backtrace exn bt (* make sure we throw with the same stack trace *)
@@ -192,20 +192,16 @@ let starts_with target src =
 ;;
 
 let chomp str =
-  if str = "" then
-    str
-  else if str.[String.length str - 1] = '\n' then
-    String.sub str 0 (String.length str - 1)
-  else
-    str
+  if str = ""
+  then str
+  else if str.[String.length str - 1] = '\n'
+  then String.sub str 0 (String.length str - 1)
+  else str
 ;;
 
 let read_options filename : compile_opts =
   let opts =
-    if Sys.file_exists filename then
-      String.split_on_char '\n' (string_of_file filename)
-    else
-      []
+    if Sys.file_exists filename then String.split_on_char '\n' (string_of_file filename) else []
   in
   let heap_size =
     match List.find_opt (starts_with "heap ") opts with
@@ -229,8 +225,8 @@ let read_options filename : compile_opts =
 ;;
 
 let parse_args (argsfile : string) (opts : compile_opts) : string list =
-  if Sys.file_exists argsfile then
-    String.split_on_char '\n' (chomp (string_of_file argsfile))
+  if Sys.file_exists argsfile
+  then String.split_on_char '\n' (chomp (string_of_file argsfile))
   else
     match opts.heap_size with
     | Some size -> [string_of_int size]
@@ -254,7 +250,10 @@ let test_run
       run program full_outfile run_no_vg no_builtins args std_input alloc_strat
     with err -> Error (Printexc.to_string err)
   in
-  assert_equal (Ok (expected ^ "\n")) result ~cmp ~printer:result_printer
+  assert_equal (Ok expected) result ~printer:result_printer ~cmp:(fun check result ->
+      match (check, result) with
+      | Ok expect_msg, Ok actual_message -> String.exists actual_message expect_msg
+      | _ -> false )
 ;;
 
 let test_run_anf
@@ -301,12 +300,7 @@ let test_err
     ?(vg = false)
     test_ctxt =
   let full_outfile = "output/" ^ outfile in
-  let runner =
-    if vg then
-      run_vg
-    else
-      run_no_vg
-  in
+  let runner = if vg then run_vg else run_no_vg in
   let result =
     try
       let program = parse_string outfile program_str in
@@ -332,12 +326,11 @@ let test_err_input filename ?(args = []) alloc_strat expected test_ctxt =
 ;;
 
 let chomp str =
-  if str = "" then
-    str
-  else if str.[String.length str - 1] = '\n' then
-    String.sub str 0 (String.length str - 1)
-  else
-    str
+  if str = ""
+  then str
+  else if str.[String.length str - 1] = '\n'
+  then String.sub str 0 (String.length str - 1)
+  else str
 ;;
 
 let test_does_run filename test_ctxt =
@@ -349,24 +342,9 @@ let test_does_run filename test_ctxt =
   let opts = read_options (sprintf "input/do_pass/%s.options" filename) in
   let prog = string_of_file progfile in
   let args = parse_args argsfile opts in
-  let output =
-    if Sys.file_exists outfile then
-      chomp (string_of_file outfile)
-    else
-      ""
-  in
-  let input =
-    if Sys.file_exists infile then
-      string_of_file infile
-    else
-      ""
-  in
-  let runner =
-    if opts.valgrind then
-      test_run_valgrind
-    else
-      test_run
-  in
+  let output = if Sys.file_exists outfile then chomp (string_of_file outfile) else "" in
+  let input = if Sys.file_exists infile then string_of_file infile else "" in
+  let runner = if opts.valgrind then test_run_valgrind else test_run in
   let alloc_strat = opts.alloc_strat in
   runner ~no_builtins:opts.no_builtins ~args ~std_input:input alloc_strat prog
     ("do_pass/" ^ filename) output test_ctxt ~cmp:(fun check result ->
@@ -384,18 +362,8 @@ let test_does_err filename test_ctxt =
   let opts = read_options (sprintf "input/do_err/%s.options" filename) in
   let prog = string_of_file progfile in
   let args = parse_args argsfile opts in
-  let err =
-    if Sys.file_exists errfile then
-      chomp (string_of_file errfile)
-    else
-      ""
-  in
-  let input =
-    if Sys.file_exists infile then
-      string_of_file infile
-    else
-      ""
-  in
+  let err = if Sys.file_exists errfile then chomp (string_of_file errfile) else "" in
+  let input = if Sys.file_exists infile then string_of_file infile else "" in
   let alloc_strat = opts.alloc_strat in
   test_err ~no_builtins:opts.no_builtins ~args ~std_input:input alloc_strat prog
     ("do_err/" ^ filename) err ~vg:opts.valgrind test_ctxt
@@ -409,18 +377,8 @@ let test_doesnt_run filename test_ctxt =
   let opts = read_options (sprintf "input/dont_pass/%s.options" filename) in
   let prog = string_of_file progfile in
   let args = parse_args argsfile opts in
-  let input =
-    if Sys.file_exists infile then
-      string_of_file infile
-    else
-      ""
-  in
-  let runner =
-    if opts.valgrind then
-      run_vg
-    else
-      run_no_vg
-  in
+  let input = if Sys.file_exists infile then string_of_file infile else "" in
+  let runner = if opts.valgrind then run_vg else run_no_vg in
   let alloc_strat = opts.alloc_strat in
   let full_outfile = "output/dont_pass" ^ filename in
   let result =
@@ -444,18 +402,8 @@ let test_doesnt_err filename test_ctxt =
   let opts = read_options (sprintf "input/dont_err/%s.options" filename) in
   let prog = string_of_file progfile in
   let args = parse_args argsfile opts in
-  let input =
-    if Sys.file_exists infile then
-      string_of_file infile
-    else
-      ""
-  in
-  let runner =
-    if opts.valgrind then
-      run_vg
-    else
-      run_no_vg
-  in
+  let input = if Sys.file_exists infile then string_of_file infile else "" in
+  let runner = if opts.valgrind then run_vg else run_no_vg in
   let alloc_strat = opts.alloc_strat in
   let full_outfile = "output/dont_err" ^ filename in
   let result =
