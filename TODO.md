@@ -1,5 +1,5 @@
 -   [ ] free_vars_cache
--   [ ] interfere
+-   [x] interfere
 -   [ ] color_graph
 -   [ ] gc
 -   [ ] input files

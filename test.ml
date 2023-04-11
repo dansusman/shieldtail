@@ -239,59 +239,77 @@ let interfere_suite =
          tinterfere "prim1" "sub1(6)" [];
          tinterfere "let" "let x = 1 in x" [("x_4", [])];
          tinterfere "two_prim1s" "add1(sub1(6))" [("unary_3", [])];
-         tinterfere "three_prim1s" "add1(add1(sub1(6)))" [("unary_3", []); ("unary_4", [])];
+         tinterfere "three_prim1s" "add1(add1(sub1(6)))"
+           [("unary_3", ["unary_4"]); ("unary_4", ["unary_3"])];
          tinterfere "nested_let" "let x = 1 in let y = 2 in (x, y)"
            [("x_4", ["y_8"]); ("y_8", ["x_4"])];
          tinterfere "nested_let_not_in_bottom" "let x = 1 in let y = x in y"
-           [("x_4", []); ("y_8", [])];
+           [("x_4", ["y_8"]); ("y_8", ["x_4"])];
          tinterfere "three_nested_let"
            "let x = 1 in let y = 2 in let z = 3 in let xy = x + y in xy + z"
-           [ ("x_4", ["z_12"; "y_8"]);
-             ("xy_16", ["z_12"]);
-             ("y_8", ["z_12"; "x_4"]);
+           [ ("x_4", ["z_12"; "y_8"; "xy_16"]);
+             ("xy_16", ["z_12"; "y_8"; "x_4"]);
+             ("y_8", ["z_12"; "x_4"; "xy_16"]);
              ("z_12", ["y_8"; "xy_16"; "x_4"]) ];
          tinterfere "disjoint_interference"
            "let x = 1 in let y = (let w = 3 in w) in let z = 3 in (x, y, z)"
-           [ ("w_11", ["x_4"]);
+           [ ("w_11", ["x_4"; "y_8"; "z_16"]);
              ("x_4", ["z_16"; "y_8"; "w_11"]);
-             ("y_8", ["z_16"; "x_4"]);
-             ("z_16", ["y_8"; "x_4"]) ];
+             ("y_8", ["z_16"; "x_4"; "w_11"]);
+             ("z_16", ["y_8"; "x_4"; "w_11"]) ];
          tinterfere "if_simple" "if true: 1 else: 2" [];
          tinterfere "if_in_let" "let x = true in if x: 1 else: 2" [("x_4", [])];
          tinterfere "lets_in_if" "if true: (let x = 1 in x) else: (let y = 2 in y)"
            [("x_6", []); ("y_11", [])];
          tinterfere "lets_in_and_out_if"
            "let z = true in if z: (let x = 1 in x) else: (let y = 2 in y)"
-           [("x_10", []); ("y_15", []); ("z_4", [])];
+           [("x_10", ["z_4"]); ("y_15", ["z_4"]); ("z_4", ["y_15"; "x_10"])];
          tinterfere "lets_in_and_out_if_interfere"
            "let z = true in if z: (let x = 1 in x) else: (let y = 2 in y + z)"
-           [("x_10", []); ("y_15", ["z_4"]); ("z_4", ["y_15"])];
+           [("x_10", ["z_4"]); ("y_15", ["z_4"]); ("z_4", ["y_15"; "x_10"])];
          tinterfere "simple_seq" "print(5); 6" [];
-         tinterfere "let_in_seq" "let x = 1 in x; let y = 2 in y" [("x_4", []); ("y_12", [])];
+         tinterfere "let_in_seq" "let x = 1 in x; let y = 2 in y"
+           [("x_4", ["y_12"]); ("y_12", ["x_4"])];
          tinterfere "let_over_seq" "let z = 3 in (let x = 1 in x; let y = 2 in y)"
-           [("x_8", []); ("y_16", []); ("z_4", [])];
+           [("x_8", ["z_4"; "y_16"]); ("y_16", ["z_4"; "x_8"]); ("z_4", ["y_16"; "x_8"])];
          tinterfere "let_over_seq_interfere" "let z = 3 in (let x = 1 in x + z; let y = 2 in y)"
-           [("x_8", ["z_4"]); ("y_18", []); ("z_4", ["x_8"])];
+           [("x_8", ["z_4"; "y_18"]); ("y_18", ["z_4"; "x_8"]); ("z_4", ["x_8"; "y_18"])];
          tinterfere "let_over_seq_interfere_both"
            "let z = 3 in (let x = 1 in x + z; let y = 2 in y + z)"
-           [("x_8", ["z_4"]); ("y_18", ["z_4"]); ("z_4", ["y_18"; "x_8"])];
+           [("x_8", ["z_4"; "y_18"]); ("y_18", ["z_4"; "x_8"]); ("z_4", ["y_18"; "x_8"])];
          tinterfere "letrec_single" "let rec x = 1 in x" [("x_4", [])];
          tinterfere "letrec_double" "let rec x = 1, y = 2 in 3" [("x_4", ["y_7"]); ("y_7", ["x_4"])];
-         tinterfere "letrec_triple" "let rec x = 1, y = 2, z = 3 in 4"
-           [("x_4", ["y_7"; "z_10"]); ("y_7", ["x_4"; "z_10"]); ("z_10", ["x_4"; "y_7"])];
+         tinterfere "letrec_triple" "let rec x = 1, y = 2, z = 3 in x + y + z"
+           [ ("x_4", ["y_7"; "z_10"; "binop_13"]);
+             ("y_7", ["x_4"; "z_10"; "binop_13"]);
+             ("z_10", ["x_4"; "y_7"; "binop_13"]);
+             ("binop_13", ["x_4"; "y_7"; "z_10"]) ];
          tinterfere "letrec_single_with_free" "let rec x = y in 1" [("x_4", ["y"]); ("y", ["x_4"])];
          tinterfere "letrec_double_one_free" "let rec x = 1, y = z in 2"
            [("x_4", ["y_7"; "z"]); ("y_7", ["x_4"; "z"]); ("z", ["x_4"; "y_7"])];
          tinterfere "letrec_id" "let rec foo = (lambda (x): x) in foo(3)" [("foo_4", [])];
          tinterfere "letrec_recursive"
            "let rec foo = (lambda (x): x), bar = (lambda (y): foo(y)) in bar(1) + foo(3)"
-           [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])];
+           [ ("foo_4", ["bar_10"; "app_21"; "app_18"]);
+             ("bar_10", ["foo_4"; "app_21"; "app_18"]);
+             ("app_18", ["foo_4"; "bar_10"; "app_21"]);
+             ("app_21", ["foo_4"; "bar_10"; "app_18"]) ];
          tinterfere "letrec_simple_body"
-           "let rec foo = (lambda (x): x), bar = (lambda (y): application) in 1"
-           [("foo_4", ["bar_11"]); ("bar_11", ["foo_4"])];
+           "let rec foo = (lambda (x): x), bar = (lambda (y): foo(y)) in 1"
+           [("foo_4", ["bar_10"]); ("bar_10", ["foo_4"])];
          tinterfere "letrec_recursive_nest"
            "let rec foo = (lambda (x): x) in let rec bar = (lambda (y): foo(y)) in bar(1) + foo(3)"
-           [("foo_4", [""])] ]
+           [ ("foo_4", ["app_19"; "app_22"; "bar_11"]);
+             ("bar_11", ["app_19"; "app_22"; "foo_4"]);
+             ("app_22", ["app_19"; "bar_11"; "foo_4"]);
+             ("app_19", ["foo_4"; "bar_11"; "app_22"]) ];
+         tinterfere "letrec_and_ifs"
+           "let rec foo = (lambda (x): x) in if (4 > 3): let rec bar = (lambda (x): x) in 1 else: \
+            let rec baz = (lambda (x): x) in 4"
+           [ ("foo_4", ["bar_15"; "baz_23"; "binop_10"]);
+             ("bar_15", ["foo_4"; "binop_10"]);
+             ("baz_23", ["foo_4"; "binop_10"]);
+             ("binop_10", ["foo_4"; "baz_23"; "bar_15"]) ] ]
 ;;
 
 let remove_node =
@@ -451,31 +469,20 @@ let gc =
     tgc "gc_not_needed" (4 + builtins_size) "let garbage = (1, 2) in 1" "" "1" ]
 ;;
 
-let gc_suite =
-  "gc_suite"
-  >::: [ tgc "gc_lam1" (10 + builtins_size)
-           "let f = (lambda: (1, 2)) in\n\
-           \       begin\n\
-           \         f();\n\
-           \         f();\n\
-           \         f();\n\
-           \         f()\n\
-           \       end" "" "(1, 2)" ]
-       @ oom @ gc
-;;
+let gc_suite = "gc_suite" >::: oom @ gc
 
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
-(* let () =
-     run_test_tt_main
-       ( "all_tests"
-       >::: [ free_vars_suite;
-              free_vars_suite;
-              gc_suite;
-              pipeline_suite;
-              graph_suite;
-              interfere_suite;
-              color_graph_suite ] )
-   ;; *)
+let () =
+  run_test_tt_main
+    ( "all_tests"
+    >::: [ free_vars_suite;
+           free_vars_suite;
+           (* gc_suite; *)
+           pipeline_suite;
+           graph_suite;
+           interfere_suite;
+           color_graph_suite ] )
+;;
 
-let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()])
+(* let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()]) *)

@@ -89,5 +89,5 @@ let graph_to_viz (g : grapht) : string =
              (List.map (fun n -> sprintf "%s -> %s" k n) (get_neighbors g k)) )
          (get_vertices g) )
   in
-  prefix ^ nodes ^ edges ^ suffix
+  prefix ^ nodes ^ "\n" ^ edges ^ suffix
 ;;
