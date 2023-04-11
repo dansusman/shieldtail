@@ -1254,23 +1254,31 @@ let compile_cexpr_suite =
               (free_vars_C
                  (CApp (ImmId ("equal", 1), [ImmNum (3L, 0); ImmNum (3L, 0)], Native, 1)) )
               [] 1 "" )
-           [ IPush (Reg RDI);
+           [ IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
              IPush (Reg RSI);
-             IPush (Reg RDX);
+             IPush (Reg RDI);
              IPush (Reg RCX);
+             IPush (Reg RDX);
              IPush (Reg R8);
              IPush (Reg R9);
-             IMov (Reg RAX, Const 6L);
-             IMov (Reg RSI, Reg RAX);
-             IMov (Reg RAX, Const 6L);
-             IMov (Reg RDI, Reg RAX);
+             IMov (Sized (QWORD_PTR, Reg RDI), Const 6L);
+             IMov (Sized (QWORD_PTR, Reg RSI), Const 6L);
              ICall (Label "equal");
              IPop (Reg R9);
              IPop (Reg R8);
-             IPop (Reg RCX);
              IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
              IPop (Reg RSI);
-             IPop (Reg RDI) ];
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
          t_asm "compile_native_fun_app_eight_arg"
            (compile_cexpr
               (free_vars_C
@@ -1287,46 +1295,84 @@ let compile_cexpr_suite =
                       Native,
                       1 ) ) )
               [] 1 "" )
-           [ IPush (Reg RDI);
+           [ IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
              IPush (Reg RSI);
-             IPush (Reg RDX);
+             IPush (Reg RDI);
              IPush (Reg RCX);
+             IPush (Reg RDX);
              IPush (Reg R8);
              IPush (Reg R9);
-             IMov (Reg RAX, Const 20L);
-             IPush (Reg RAX);
-             IMov (Reg RAX, Const 18L);
-             IPush (Reg RAX);
-             IMov (Reg RAX, Const 16L);
-             IMov (Reg R9, Reg RAX);
-             IMov (Reg RAX, Const 14L);
-             IMov (Reg R8, Reg RAX);
-             IMov (Reg RAX, Const 12L);
-             IMov (Reg RCX, Reg RAX);
-             IMov (Reg RAX, Const 10L);
-             IMov (Reg RDX, Reg RAX);
-             IMov (Reg RAX, Const 8L);
-             IMov (Reg RSI, Reg RAX);
-             IMov (Reg RAX, Const 6L);
-             IMov (Reg RDI, Reg RAX);
+             IMov (Sized (QWORD_PTR, Reg RDI), Const 6L);
+             IMov (Sized (QWORD_PTR, Reg RSI), Const 8L);
+             IMov (Sized (QWORD_PTR, Reg RDX), Const 10L);
+             IMov (Sized (QWORD_PTR, Reg RCX), Const 12L);
+             IMov (Sized (QWORD_PTR, Reg R8), Const 14L);
+             IMov (Sized (QWORD_PTR, Reg R9), Const 16L);
+             IPush (Const 20L);
+             IPush (Const 18L);
              ICall (Label "equal");
-             IAdd (Reg RSP, Const 16L);
+             IInstrComment (IAdd (Reg RSP, Const 16L), "Popping 2 arguments");
              IPop (Reg R9);
              IPop (Reg R8);
-             IPop (Reg RCX);
              IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
              IPop (Reg RSI);
-             IPop (Reg RDI) ];
-         t_asm "compile_tuple"
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
+         t_asm "tuple"
            (compile_cexpr
-              (free_vars_C (CTuple ([ImmNum (3L, 2); ImmBool (false, 1); ImmNil 3], 0)))
-              [] 1 "" )
-           [ IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 3L);
-             IMov (Reg R11, Const 6L);
+              (free_vars_C (CTuple ([ImmNum (1L, 2); ImmNum (2L, 3); ImmNum (3L, 4)], 1)))
+              [(0, [])]
+              0 "" )
+           [ IInstrComment (IMov (Reg RAX, LabelContents "?HEAP_END"), "Reserving 4 words");
+             ISub (Reg RAX, Const 32L);
+             ICmp (Reg RAX, Reg R15);
+             IJge (Label "$memcheck_1");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Sized (QWORD_PTR, Reg RDI), Sized (QWORD_PTR, Reg R15));
+             IMov (Sized (QWORD_PTR, Reg RSI), Sized (QWORD_PTR, Const 32L));
+             IMov (Sized (QWORD_PTR, Reg RDX), Sized (QWORD_PTR, Reg RBP));
+             IMov (Sized (QWORD_PTR, Reg RCX), Sized (QWORD_PTR, Reg RSP));
+             ICall (Label "?try_gc");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10);
+             IInstrComment
+               ( IMov (Reg R15, Reg RAX),
+                 "assume gc success if returning here, so RAX holds the new heap_reg value" );
+             ILabel "$memcheck_1";
+             IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 6L);
+             IMov (Reg R11, Const 2L);
              IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11);
-             IMov (Reg R11, HexConst 0x7FFFFFFFFFFFFFFFL);
+             IMov (Reg R11, Const 4L);
              IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Reg R11);
-             IMov (Reg R11, HexConst 0x0000000000000001L);
+             IMov (Reg R11, Const 6L);
              IMov (Sized (QWORD_PTR, RegOffset (24, R15)), Reg R11);
              IMov (Reg RAX, Reg R15);
              IOr (Reg RAX, Const 1L);
@@ -1337,10 +1383,14 @@ let compile_cexpr_suite =
               [(1, [("tup_4", RegOffset (-8, RBP))])]
               1 "" )
            [ IMov (Reg RAX, RegOffset (-8, RBP));
+             ICmp (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (-8, RBP));
+             IJe (Label "?err_nil_deref");
+             IMov (Reg RAX, RegOffset (-8, RBP));
              ISub (Reg RAX, Const 1L);
              IMov (Reg R11, Const 4L);
-             ISar (Reg R11, Const 1L);
              ICmp (Reg R11, RegOffset (0, RAX));
+             IMov (Reg R11, RegOffset (-8, RBP));
              IJne (Label "?err_tuple_destructure_mismatch");
              IAdd (Reg RAX, Const 1L) ];
          t_asm "snake_fun_call_tuple"
@@ -1352,186 +1402,280 @@ let compile_cexpr_suite =
                     ("y_6", RegOffset (-16, RBP));
                     ("y_3", RegOffset (-24, RBP)) ] ) ]
               0 "" )
-           [ ILineComment "checking that (foo) with tag 3 is a closure";
-             IMov (Reg RAX, RegOffset (-8, RBP));
+           [ IMov (Reg RAX, RegOffset (-8, RBP));
              IAnd (Reg RAX, HexConst 7L);
+             IMov (Reg R11, RegOffset (-8, RBP));
              ICmp (Reg RAX, Const 5L);
-             IMov (Reg RDI, RegOffset (-8, RBP));
              IJne (Label "?err_call_not_closure");
-             IInstrComment (IMov (Reg RAX, RegOffset (-8, RBP)), "compiled closure: foo");
-             IInstrComment (ISub (Reg RAX, HexConst 5L), "strip off tag");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             ISub (Reg RAX, HexConst 5L);
              IMov (Reg R11, RegOffset (0, RAX));
              ICmp (Reg R11, Const 2L);
-             IMov (Reg RDI, Reg R11);
              IJne (Label "?err_call_arity_err");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
              IMov (Reg R11, RegOffset (-24, RBP));
              IPush (Reg R11);
              IMov (Reg R11, RegOffset (-16, RBP));
              IPush (Reg R11);
              IInstrComment (IPush (Sized (QWORD_PTR, RegOffset (-8, RBP))), "push closure to stack");
              ICall (RegOffset (8, RAX));
-             IAdd (Reg RSP, Const 24L) ]
-         (*t_asm "compile_nullary_lam"
-                       (compile_cexpr
-                          (free_vars_C (CLambda ([], ACExpr (CImmExpr (ImmNum (100L, 1))), 2)))
-                          [] 0 "" )
-                       [ ILineComment "skip over the code for the lambda";
-                         IJmp (Label "lam_2_done");
-                         ILabel "lam_2";
-                         ILineComment "prologue";
-                         IPush (Reg RBP);
-                         IMov (Reg RBP, Reg RSP);
-                         ILineComment "unpack the closure";
-                         IInstrComment
-                           ( ISub (Reg RSP, Const 0L),
-                             "reserve space on the stack for closed-over vars and local vars" );
-                         IInstrComment
-                           ( IMov (Reg R11, RegOffset (16, RBP)),
-                             "\\ load the self argument (assumes self is always first argument)" );
-                         IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
-                         ILineComment "actual function body";
-                         IMov (Reg RAX, Const 200L);
-                         ILineComment "epilogue";
-                         IMov (Reg RSP, Reg RBP);
-                         IPop (Reg RBP);
-                         IRet;
-                         ILabel "lam_2_done";
-                         ILineComment "start filling in the closure information";
-                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 0L), "arity");
-                         IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_2"), "\t\\ code pointer");
-                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
-                         IInstrComment
-                           (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of free variables");
-                         ILineComment "start creating the closure value";
-                         IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
-                         IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
-                         IInstrComment
-                           (IAdd (Reg R15, Const 32L), "update heap pointer, keeping 16-byte alignment");
-                         ILineComment "now RAX contains a proper closure value" ];
-                     t_asm "compile_unary_lam"
-                       (compile_cexpr
-                          (free_vars_C (CLambda (["x_4"], ACExpr (CImmExpr (ImmId ("x_4", 2))), 1)))
-                          [(0, [("x_4", RegOffset (24, RBP))])]
-                          0 "" )
-                       [ ILineComment "skip over the code for the lambda";
-                         IJmp (Label "lam_1_done");
-                         ILabel "lam_1";
-                         ILineComment "prologue";
-                         IPush (Reg RBP);
-                         IMov (Reg RBP, Reg RSP);
-                         ILineComment "unpack the closure";
-                         IInstrComment
-                           ( ISub (Reg RSP, Const 0L),
-                             "reserve space on the stack for closed-over vars and local vars" );
-                         IInstrComment
-                           ( IMov (Reg R11, RegOffset (16, RBP)),
-                             "\\ load the self argument (assumes self is always first argument)" );
-                         IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
-                         ILineComment "actual function body";
-                         IMov (Reg RAX, RegOffset (24, RBP));
-                         ILineComment "epilogue";
-                         IMov (Reg RSP, Reg RBP);
-                         IPop (Reg RBP);
-                         IRet;
-                         ILabel "lam_1_done";
-                         ILineComment "start filling in the closure information";
-                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "arity");
-                         IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_1"), "\t\\ code pointer");
-                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
-                         IInstrComment
-                           (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of free variables");
-                         ILineComment "start creating the closure value";
-                         IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
-                         IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
-                         IInstrComment
-                           (IAdd (Reg R15, Const 32L), "update heap pointer, keeping 16-byte alignment");
-                         ILineComment "now RAX contains a proper closure value" ];
-           t_asm "compile_lam_with_frees"
-             (compile_cexpr
-                (free_vars_C
-                   (CLambda
-                      ( ["y_8"],
-                        ALet
-                          ( "binop_4",
-                            CPrim2 (Plus, ImmId ("x", 8), ImmId ("y_8", 7), 6),
-                            ACExpr (CPrim2 (Plus, ImmId ("binop_4", 5), ImmId ("z", 4), 3)),
-                            2 ),
-                        1 ) ) )
-                [ ( 0,
-                    [ ("y_8", RegOffset (24, RBP));
-                      ("binop_4", RegOffset (-24, RBP));
-                      ("x", RegOffset (8, RBP));
-                      ("z", RegOffset (16, RBP)) ] ) ]
-                0 "" )
-             [ ILineComment "skip over the code for the lambda";
-               IJmp (Label "lam_1_done");
-               ILabel "lam_1";
-               ILineComment "prologue";
-               IPush (Reg RBP);
-               IMov (Reg RBP, Reg RSP);
-               ILineComment "unpack the closure";
-               IInstrComment
-                 ( ISub (Reg RSP, Const 48L),
-                   "reserve space on the stack for closed-over vars and local vars" );
-               IInstrComment
-                 ( IMov (Reg R11, RegOffset (16, RBP)),
-                   "\\ load the self argument (assumes self is always first argument)" );
-               IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
-               IInstrComment (IMov (Reg RAX, RegOffset (24, R11)), "\\ load z from closure");
-               IInstrComment (IMov (RegOffset (16, RBP), Reg RAX), "/ into its correct stack slot");
-               IInstrComment (IMov (Reg RAX, RegOffset (32, R11)), "\\ load x from closure");
-               IInstrComment (IMov (RegOffset (8, RBP), Reg RAX), "/ into its correct stack slot");
-               ILineComment "actual function body";
-               IMov (Reg RAX, RegOffset (8, RBP));
-               IAnd (Reg RAX, HexConst 1L);
-               ICmp (Reg RAX, Const 0L);
-               IMov (Reg RDI, RegOffset (8, RBP));
-               IJne (Label "?err_arith_not_num");
-               IMov (Reg RAX, RegOffset (24, RBP));
-               IAnd (Reg RAX, HexConst 1L);
-               ICmp (Reg RAX, Const 0L);
-               IMov (Reg RDI, RegOffset (24, RBP));
-               IJne (Label "?err_arith_not_num");
-               IMov (Reg RAX, RegOffset (8, RBP));
-               IMov (Reg R11, RegOffset (24, RBP));
-               IAdd (Reg RAX, Reg R11);
-               IJo (Label "?err_overflow");
-               IInstrComment (IMov (RegOffset (-24, RBP), Reg RAX), "binding binop_4 at tag 2");
-               IMov (Reg RAX, RegOffset (-24, RBP));
-               IAnd (Reg RAX, HexConst 1L);
-               ICmp (Reg RAX, Const 0L);
-               IMov (Reg RDI, RegOffset (-24, RBP));
-               IJne (Label "?err_arith_not_num");
-               IMov (Reg RAX, RegOffset (16, RBP));
-               IAnd (Reg RAX, HexConst 1L);
-               ICmp (Reg RAX, Const 0L);
-               IMov (Reg RDI, RegOffset (16, RBP));
-               IJne (Label "?err_arith_not_num");
-               IMov (Reg RAX, RegOffset (-24, RBP));
-               IMov (Reg R11, RegOffset (16, RBP));
-               IAdd (Reg RAX, Reg R11);
-               IJo (Label "?err_overflow");
-               ILineComment "epilogue";
-               IMov (Reg RSP, Reg RBP);
-               IPop (Reg RBP);
-               IRet;
-               ILabel "lam_1_done";
-               ILineComment "start filling in the closure information";
-               IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "arity");
-               IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_1"), "\t\\ code pointer");
-               IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
-               IInstrComment
-                 (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 2L), "# of free variables");
-               IInstrComment (IMov (Reg RAX, RegOffset (16, RBP)), "copy z from argument");
-               IInstrComment (IMov (RegOffset (24, R15), Reg RAX), "into closure");
-               IInstrComment (IMov (Reg RAX, RegOffset (8, RBP)), "copy x from argument");
-               IInstrComment (IMov (RegOffset (32, R15), Reg RAX), "into closure");
-               ILineComment "start creating the closure value";
-               IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
-               IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
-               IInstrComment
-                 (IAdd (Reg R15, Const 48L), "update heap pointer, keeping 16-byte alignment");
-               ILineComment "now RAX contains a proper closure value" ] *) ]
+             IInstrComment (IAdd (Reg RSP, Const 24L), "Popping 3 arguments");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
+         t_asm "lam_nullary"
+           (compile_cexpr
+              (free_vars_C (CLambda ([], ACExpr (CImmExpr (ImmNum (100L, 1))), 2)))
+              [(0, []); (2, [])]
+              0 "" )
+           [ IJmp (Label "$lam_2_end");
+             ILabel "$lam_2_start";
+             IPush (Reg RBP);
+             IMov (Reg RBP, Reg RSP);
+             IInstrComment (IMov (Reg R11, RegOffset (16, RBP)), "\t\\ load self ptr");
+             IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag");
+             IMov (Reg RAX, Const 200L);
+             IMov (Reg RSP, Reg RBP);
+             IPop (Reg RBP);
+             IRet;
+             ILabel "$lam_2_end";
+             IInstrComment (IMov (Reg RAX, LabelContents "?HEAP_END"), "Reserving 4 words");
+             ISub (Reg RAX, Const 32L);
+             ICmp (Reg RAX, Reg R15);
+             IJge (Label "$memcheck_2");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Sized (QWORD_PTR, Reg RDI), Sized (QWORD_PTR, Reg R15));
+             IMov (Sized (QWORD_PTR, Reg RSI), Sized (QWORD_PTR, Const 32L));
+             IMov (Sized (QWORD_PTR, Reg RDX), Sized (QWORD_PTR, Reg RBP));
+             IMov (Sized (QWORD_PTR, Reg RCX), Sized (QWORD_PTR, Reg RSP));
+             ICall (Label "?try_gc");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10);
+             IInstrComment
+               ( IMov (Reg R15, Reg RAX),
+                 "assume gc success if returning here, so RAX holds the new heap_reg value" );
+             ILabel "$memcheck_2";
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 0L), "load arity");
+             IInstrComment
+               (IMov (Sized (QWORD_PTR, Reg R11), Label "$lam_2_start"), "\t\\ load code ptr");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "\t/");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of fvs (0)");
+             IMov (Reg RAX, Reg R15);
+             IAdd (Reg RAX, HexConst 5L);
+             IAdd (Reg R15, Const 32L) ];
+         t_asm "lam_one_arg"
+           (compile_cexpr
+              (free_vars_C (CLambda (["x_4"], ACExpr (CImmExpr (ImmId ("x_4", 2))), 1)))
+              [(0, []); (1, [("x_4", RegOffset (24, RBP))])]
+              0 "" )
+           [ IJmp (Label "$lam_1_end");
+             ILabel "$lam_1_start";
+             IPush (Reg RBP);
+             IMov (Reg RBP, Reg RSP);
+             IInstrComment (IMov (Reg R11, RegOffset (16, RBP)), "\t\\ load self ptr");
+             IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag");
+             IMov (Reg RAX, RegOffset (24, RBP));
+             IMov (Reg RSP, Reg RBP);
+             IPop (Reg RBP);
+             IRet;
+             ILabel "$lam_1_end";
+             IInstrComment (IMov (Reg RAX, LabelContents "?HEAP_END"), "Reserving 4 words");
+             ISub (Reg RAX, Const 32L);
+             ICmp (Reg RAX, Reg R15);
+             IJge (Label "$memcheck_1");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Sized (QWORD_PTR, Reg RDI), Sized (QWORD_PTR, Reg R15));
+             IMov (Sized (QWORD_PTR, Reg RSI), Sized (QWORD_PTR, Const 32L));
+             IMov (Sized (QWORD_PTR, Reg RDX), Sized (QWORD_PTR, Reg RBP));
+             IMov (Sized (QWORD_PTR, Reg RCX), Sized (QWORD_PTR, Reg RSP));
+             ICall (Label "?try_gc");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10);
+             IInstrComment
+               ( IMov (Reg R15, Reg RAX),
+                 "assume gc success if returning here, so RAX holds the new heap_reg value" );
+             ILabel "$memcheck_1";
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "load arity");
+             IInstrComment
+               (IMov (Sized (QWORD_PTR, Reg R11), Label "$lam_1_start"), "\t\\ load code ptr");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "\t/");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of fvs (0)");
+             IMov (Reg RAX, Reg R15);
+             IAdd (Reg RAX, HexConst 5L);
+             IAdd (Reg R15, Const 32L) ];
+         t_asm "lam_frees"
+           (compile_cexpr
+              (free_vars_C
+                 (CLambda
+                    ( ["y_8"],
+                      ALet
+                        ( "binop_4",
+                          CPrim2 (Plus, ImmId ("x", 8), ImmId ("y_8", 7), 6),
+                          ACExpr (CPrim2 (Plus, ImmId ("binop_4", 5), ImmId ("z", 4), 3)),
+                          2 ),
+                      1 ) ) )
+              [ ( 0,
+                  [ ("y_8", RegOffset (24, RBP));
+                    ("binop_4", RegOffset (-24, RBP));
+                    ("x", RegOffset (8, RBP));
+                    ("z", RegOffset (16, RBP)) ] );
+                ( 1,
+                  [ ("y_8", RegOffset (24, RBP));
+                    ("binop_4", RegOffset (-24, RBP));
+                    ("x", RegOffset (8, RBP));
+                    ("z", RegOffset (16, RBP)) ] ) ]
+              0 "" )
+           [ IJmp (Label "$lam_1_end");
+             ILabel "$lam_1_start";
+             IPush (Reg RBP);
+             IMov (Reg RBP, Reg RSP);
+             IPush (Sized (QWORD_PTR, Const 0L));
+             IPush (Sized (QWORD_PTR, Const 0L));
+             IPush (Sized (QWORD_PTR, Const 0L));
+             IPush (Sized (QWORD_PTR, Const 0L));
+             IPush (Sized (QWORD_PTR, Const 0L));
+             IInstrComment (IMov (Reg R11, RegOffset (16, RBP)), "\t\\ load self ptr");
+             IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag");
+             IInstrComment (IMov (Reg RAX, RegOffset (24, R11)), "\t\\ load free var: x");
+             IInstrComment (IMov (RegOffset (8, RBP), Reg RAX), "\t/ into its correct slot");
+             IInstrComment (IMov (Reg RAX, RegOffset (32, R11)), "\t\\ load free var: z");
+             IInstrComment (IMov (RegOffset (16, RBP), Reg RAX), "\t/ into its correct slot");
+             IMov (Reg RAX, RegOffset (8, RBP));
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (8, RBP));
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, RegOffset (24, RBP));
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (24, RBP));
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, RegOffset (8, RBP));
+             IMov (Reg R11, RegOffset (24, RBP));
+             IAdd (Reg RAX, Reg R11);
+             IJo (Label "?err_overflow");
+             IInstrComment (IMov (RegOffset (-24, RBP), Reg RAX), "binding binop_4 at tag 1");
+             IMov (Reg RAX, RegOffset (-24, RBP));
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (-24, RBP));
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, RegOffset (16, RBP));
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (16, RBP));
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, RegOffset (-24, RBP));
+             IMov (Reg R11, RegOffset (16, RBP));
+             IAdd (Reg RAX, Reg R11);
+             IJo (Label "?err_overflow");
+             IMov (Reg RSP, Reg RBP);
+             IPop (Reg RBP);
+             IRet;
+             ILabel "$lam_1_end";
+             IInstrComment (IMov (Reg RAX, LabelContents "?HEAP_END"), "Reserving 6 words");
+             ISub (Reg RAX, Const 48L);
+             ICmp (Reg RAX, Reg R15);
+             IJge (Label "$memcheck_1");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Sized (QWORD_PTR, Reg RDI), Sized (QWORD_PTR, Reg R15));
+             IMov (Sized (QWORD_PTR, Reg RSI), Sized (QWORD_PTR, Const 48L));
+             IMov (Sized (QWORD_PTR, Reg RDX), Sized (QWORD_PTR, Reg RBP));
+             IMov (Sized (QWORD_PTR, Reg RCX), Sized (QWORD_PTR, Reg RSP));
+             ICall (Label "?try_gc");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10);
+             IInstrComment
+               ( IMov (Reg R15, Reg RAX),
+                 "assume gc success if returning here, so RAX holds the new heap_reg value" );
+             ILabel "$memcheck_1";
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "load arity");
+             IInstrComment
+               (IMov (Sized (QWORD_PTR, Reg R11), Label "$lam_1_start"), "\t\\ load code ptr");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "\t/");
+             IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 2L), "# of fvs (2)");
+             IInstrComment (IMov (Reg RAX, RegOffset (8, RBP)), "\t\\ copy x from arg");
+             IInstrComment (IMov (RegOffset (24, R15), Reg RAX), "\t/ into closure");
+             IInstrComment (IMov (Reg RAX, RegOffset (16, RBP)), "\t\\ copy z from arg");
+             IInstrComment (IMov (RegOffset (32, R15), Reg RAX), "\t/ into closure");
+             IMov (Reg RAX, Reg R15);
+             IAdd (Reg RAX, HexConst 5L);
+             IAdd (Reg R15, Const 48L) ] ]
 ;;
 
 let simple_if = "if true: 5 + 3 else: 6 * 6"
@@ -1881,9 +2025,10 @@ let () =
            reg_alloc_suite;
            naive_alloc_suite;
            compile_aexpr_suite;
-           (* compile_cexpr_suite; *)
            integration_test_suite;
-           (* gc_suite; *)
+           gc_suite;
+           compile_cexpr_suite;
            lambda_suite;
-           color_graph_suite (* input_file_test_suite () *) ] )
+           color_graph_suite;
+           input_file_test_suite () ] )
 ;;

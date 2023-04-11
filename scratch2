@@ -1,18 +1,95 @@
-mov RAX, 8
-  mov [RBP-8], RAX ; binding x#1 at tag 1
-  mov RAX, [RBP-8]
+jmp near $lam_1_end
+align 16
+$lam_1_start:
+  push RBP
+  mov RBP, RSP
+  push QWORD 0
+  push QWORD 0
+  push QWORD 0
+  push QWORD 0
+  push QWORD 0
+  mov R11, [RBP+16] ;   \ load self ptr
+  sub R11, 0x5 ;        / and untag
+  mov RAX, [R11+24] ;   \ load free var: x
+  mov [RBP+8], RAX ;    / into its correct slot
+  mov RAX, [R11+32] ;   \ load free var: z
+  mov [RBP+16], RAX ;   / into its correct slot
+  mov RAX, [RBP+8]
   and RAX, 0x1
-  mov R11, [RBP-8]
+  mov R11, [RBP+8]
   cmp RAX, 0
   jne near ?err_arith_not_num
-  mov RAX, 4
+  mov RAX, [RBP+24]
   and RAX, 0x1
-  mov R11, 4
+  mov R11, [RBP+24]
   cmp RAX, 0
   jne near ?err_arith_not_num
-  mov RAX, [RBP-8]
-  mov R11, 4
+  mov RAX, [RBP+8]
+  mov R11, [RBP+24]
   add RAX, R11
   jo near ?err_overflow
-  mov [RBP-16], RAX ; binding x#2 at tag 1
-  mov RAX, [RBP-16]
+  mov [RBP-24], RAX ; binding binop_4 at tag 1
+  mov RAX, [RBP-24]
+  and RAX, 0x1
+  mov R11, [RBP-24]
+  cmp RAX, 0
+  jne near ?err_arith_not_num
+  mov RAX, [RBP+16]
+  and RAX, 0x1
+  mov R11, [RBP+16]
+  cmp RAX, 0
+  jne near ?err_arith_not_num
+  mov RAX, [RBP-24]
+  mov R11, [RBP+16]
+  add RAX, R11
+  jo near ?err_overflow
+  mov RSP, RBP
+  pop RBP
+  ret
+align 16
+$lam_1_end:
+  mov RAX, [?HEAP_END] ; Reserving 6 words
+  sub RAX, 48
+  cmp RAX, R15
+  jge near $memcheck_1
+  push R10
+  push R12
+  push R13
+  push R14
+  push RBX
+  push RSI
+  push RDI
+  push RCX
+  push RDX
+  push R8
+  push R9
+  mov QWORD RDI, QWORD R15
+  mov QWORD RSI, QWORD 48
+  mov QWORD RDX, QWORD RBP
+  mov QWORD RCX, QWORD RSP
+  call ?try_gc
+  pop R9
+  pop R8
+  pop RDX
+  pop RCX
+  pop RDI
+  pop RSI
+  pop RBX
+  pop R14
+  pop R13
+  pop R12
+  pop R10
+  mov R15, RAX ; assume gc success if returning here, so RAX holds the new heap_reg value
+align 16
+$memcheck_1:
+  mov QWORD [R15+0], 1 ; load arity
+  mov QWORD R11, $lam_1_start ;         \ load code ptr
+  mov QWORD [R15+8], R11 ;      /
+  mov QWORD [R15+16], 2 ; # of fvs (2)
+  mov RAX, [RBP+8] ;    \ copy x from arg
+  mov [R15+24], RAX ;   / into closure
+  mov RAX, [RBP+16] ;   \ copy z from arg
+  mov [R15+32], RAX ;   / into closure
+  mov RAX, R15
+  add RAX, 0x5
+  add R15, 48
