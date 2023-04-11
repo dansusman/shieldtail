@@ -122,22 +122,22 @@ let rec find_with_tag ls t x =
       else find_with_tag rest t x
 ;;
 
-let count_vars e =
-  let rec helpA e =
-    match e with
-    | ASeq (e1, e2, _) -> max (helpC e1) (helpA e2)
-    | ALet (_, bind, body, _) -> 1 + max (helpC bind) (helpA body)
-    | ALetRec (binds, body, _) ->
-        List.length binds
-        + List.fold_left max (helpA body) (List.map (fun (_, rhs) -> helpC rhs) binds)
-    | ACExpr e -> helpC e
-  and helpC e =
-    match e with
-    | CIf (_, t, f, _) -> max (helpA t) (helpA f)
-    | _ -> 0
-  in
-  helpA e
-;;
+(* let count_vars e =
+     let rec helpA e =
+       match e with
+       | ASeq (e1, e2, _) -> max (helpC e1) (helpA e2)
+       | ALet (_, bind, body, _) -> 1 + max (helpC bind) (helpA body)
+       | ALetRec (binds, body, _) ->
+           List.length binds
+           + List.fold_left max (helpA body) (List.map (fun (_, rhs) -> helpC rhs) binds)
+       | ACExpr e -> helpC e
+     and helpC e =
+       match e with
+       | CIf (_, t, f, _) -> max (helpA t) (helpA f)
+       | _ -> 0
+     in
+     helpA e
+   ;; *)
 
 let rec replicate x i = if i = 0 then [] else x :: replicate x (i - 1)
 
@@ -159,7 +159,7 @@ let rec find_one (l : 'a list) (elt : 'a) : bool =
 let rec find_dup (l : 'a list) : 'a option =
   match l with
   | [] -> None
-  | [x] -> None
+  | [_] -> None
   | x :: xs -> if find_one xs x then Some x else find_dup xs
 ;;
 
@@ -196,8 +196,8 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
     match e with
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
-    | EGetItem (e, idx, pos) -> wf_E e env @ wf_E idx env
-    | ESetItem (e, idx, newval, pos) -> wf_E e env @ wf_E idx env @ wf_E newval env
+    | EGetItem (e, idx, _) -> wf_E e env @ wf_E idx env
+    | ESetItem (e, idx, newval, _) -> wf_E e env @ wf_E idx env @ wf_E newval env
     | ENil _ -> []
     | EBool _ -> []
     | ENumber (n, loc) ->
@@ -246,7 +246,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
         let rec process_bindings bindings (env : scope_info name_envt) =
           match bindings with
           | [] -> (env, [])
-          | (b, e, loc) :: rest ->
+          | (b, e, _) :: rest ->
               let errs_e = wf_E e env in
               let env', errs = process_binds [b] env in
               let env'', errs' = process_bindings rest env' in
@@ -254,7 +254,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
         in
         let env2, errs = process_bindings bindings env in
         dupeIds @ errs @ wf_E body env2
-    | EApp (func, args, native, loc) ->
+    | EApp (func, args, _, loc) ->
         let rec_errors = List.concat (List.map (fun e -> wf_E e env) (func :: args)) in
         ( match func with
         | EId (funname, _) -> (
@@ -314,7 +314,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
         let rec process_bindings bindings env =
           match bindings with
           | [] -> (env, [])
-          | (b, e, loc) :: rest ->
+          | (b, e, _) :: rest ->
               let env, errs = process_binds [b] env in
               let errs_e = wf_E e env in
               let env', errs' = process_bindings rest env in
@@ -341,7 +341,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
               | None -> []
               | Some where -> [DuplicateId (x, where, loc)] )
               @ process_args rest
-          | BTuple (binds, loc) :: rest -> process_args (binds @ rest)
+          | BTuple (binds, _) :: rest -> process_args (binds @ rest)
         in
         let rec flatten_bind (bind : sourcespan bind) : (string * scope_info) list =
           match bind with
@@ -350,7 +350,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           | BTuple (args, _) -> List.concat (List.map flatten_bind args)
         in
         process_args binds @ wf_E body (merge_envs (List.concat (List.map flatten_bind binds)) env)
-  and wf_D d (env : scope_info name_envt) (tyenv : StringSet.t) =
+  and wf_D d (env : scope_info name_envt) =
     match d with
     | DFun (_, args, body, _) ->
         let rec dupe x args =
@@ -369,7 +369,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
               | None -> []
               | Some where -> [DuplicateId (x, where, loc)] )
               @ process_args rest
-          | BTuple (binds, loc) :: rest -> process_args (binds @ rest)
+          | BTuple (binds, _) :: rest -> process_args (binds @ rest)
         in
         let rec arg_env args (env : scope_info name_envt) =
           match args with
@@ -379,14 +379,14 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
           | BTuple (binds, _) :: rest -> arg_env (binds @ rest) env
         in
         process_args args @ wf_E body (arg_env args env)
-  and wf_G (g : sourcespan decl list) (env : scope_info name_envt) (tyenv : StringSet.t) =
+  and wf_G (g : sourcespan decl list) (env : scope_info name_envt) =
     let add_funbind (env : scope_info name_envt) d =
       match d with
       | DFun (name, args, _, loc) ->
           (name, (loc, Some (List.length args), Some (List.length args))) :: env
     in
     let env = List.fold_left add_funbind env g in
-    let errs = List.concat (List.map (fun d -> wf_D d env tyenv) g) in
+    let errs = List.concat (List.map (fun d -> wf_D d env) g) in
     (errs, env)
   in
   match p with
@@ -401,22 +401,21 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
       let rec find name (decls : 'a decl list) =
         match decls with
         | [] -> None
-        | DFun (n, args, _, loc) :: rest when n = name -> Some loc
+        | DFun (n, _, _, loc) :: _ when n = name -> Some loc
         | _ :: rest -> find name rest
       in
       let rec dupe_funbinds decls =
         match decls with
         | [] -> []
-        | DFun (name, args, _, loc) :: rest ->
+        | DFun (name, _, _, loc) :: rest ->
             ( match find name rest with
             | None -> []
             | Some where -> [DuplicateFun (name, where, loc)] )
             @ dupe_funbinds rest
       in
       let all_decls = List.flatten decls in
-      let initial_tyenv = StringSet.of_list ["Int"; "Bool"] in
       let help_G (env, exns) g =
-        let g_exns, funbinds = wf_G g env initial_tyenv in
+        let g_exns, funbinds = wf_G g env in
         (List.fold_left (fun xs x -> x :: xs) env funbinds, exns @ g_exns)
       in
       let env, exns = List.fold_left help_G (initial_env, dupe_funbinds all_decls) decls in
@@ -482,7 +481,7 @@ let desugar (p : sourcespan program) : sourcespan program =
   and expandTuple binds tag source : sourcespan binding list =
     let tupleBind i b =
       match b with
-      | BBlank btag -> []
+      | BBlank _ -> []
       | BName (_, _, btag) ->
           [(b, EGetItem (source, ENumber (Int64.of_int i, dummy_span), tag), btag)]
       | BTuple (binds, tag) ->
@@ -600,7 +599,7 @@ let rename_and_tag (p : tag program) : tag program =
         DFun (name, newArgs, helpE env' body, tag)
   and helpB env b =
     match b with
-    | BBlank tag -> (b, env)
+    | BBlank _ -> (b, env)
     | BName (name, allow_shadow, tag) ->
         let name' = sprintf "%s_%d" name tag in
         (BName (name', allow_shadow, tag), (name, name') :: env)
@@ -635,7 +634,7 @@ let rename_and_tag (p : tag program) : tag program =
     | EBool _ -> e
     | ENil _ -> e
     | EId (name, tag) -> ( try EId (find env name, tag) with InternalCompilerError _ -> e )
-    | EApp (func, args, native, tag) -> (
+    | EApp (func, args, _, tag) -> (
       match func with
       | EId (name, _) when find_one c_global_function_names name ->
           EApp (func, List.map (helpE env) args, Native, tag)
@@ -713,7 +712,7 @@ let anf (p : tag program) : unit aprogram =
                       (string_of_bind bind) ) )
         in
         let names, new_binds_setup = List.split (List.map processBind binds) in
-        let new_binds, new_setup = List.split new_binds_setup in
+        let new_binds, _ = List.split new_binds_setup in
         let body_ans, body_setup = helpC body in
         (body_ans, BLetRec (List.combine names new_binds) :: body_setup)
     | ELambda (args, body, _) ->
@@ -727,7 +726,7 @@ let anf (p : tag program) : unit aprogram =
                       (string_of_bind bind) ) )
         in
         (CLambda (List.map processBind args, helpA body, ()), [])
-    | ELet ((BTuple (binds, _), exp, _) :: rest, body, pos) ->
+    | ELet ((BTuple (_, _), _, _) :: _, _, _) ->
         raise (InternalCompilerError "Tuple bindings should have been desugared away")
     | EApp (func, args, native, _) ->
         let func_ans, func_setup = helpI func in
@@ -759,7 +758,7 @@ let anf (p : tag program) : unit aprogram =
     | EId (name, _) -> (ImmId (name, ()), [])
     | ENil _ -> (ImmNil (), [])
     | ESeq (e1, e2, _) ->
-        let e1_imm, e1_setup = helpI e1 in
+        let _, e1_setup = helpI e1 in
         let e2_imm, e2_setup = helpI e2 in
         (e2_imm, e1_setup @ e2_setup)
     | ETuple (args, tag) ->
@@ -840,7 +839,7 @@ let anf (p : tag program) : unit aprogram =
         let exp_ans, exp_setup = helpC exp in
         let body_ans, body_setup = helpI (ELet (rest, body, pos)) in
         (body_ans, exp_setup @ [BLet (bind, exp_ans)] @ body_setup)
-    | ELet ((BTuple (binds, _), exp, _) :: rest, body, pos) ->
+    | ELet ((BTuple (_, _), _, _) :: _, _, _) ->
         raise (InternalCompilerError "Tuple bindings should have been desugared away")
   and helpA e : unit aexpr =
     let ans, ans_setup = helpC e in
@@ -942,7 +941,7 @@ let get_fv_info (e : 'a aexpr) : StringSet.t =
       ) )
 ;;
 
-let rec free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
+let free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
   let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
     match e with
     | CIf (c, t, e, tag) ->
@@ -1071,13 +1070,13 @@ let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) :
 
 let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) (delete : StringSet.t) :
     grapht =
-  let rec help_C (c_e : (StringSet.t * tag) cexpr) : grapht =
+  let help_C (c_e : (StringSet.t * tag) cexpr) : grapht =
     match c_e with
-    | CIf (c, t, e, (fvs, _)) -> merge_two (interfere t live delete) (interfere e live delete)
+    | CIf (_, t, e, (_, _)) -> merge_two (interfere t live delete) (interfere e live delete)
     | _ -> Graph.empty
   in
   match e with
-  | ASeq (f, s, (fvs, _)) -> merge_two (help_C f) (interfere s live delete)
+  | ASeq (f, s, (_, _)) -> merge_two (help_C f) (interfere s live delete)
   | ALet (name, bound, body, (fvs, _)) ->
       let interf_stuff = StringSet.elements (StringSet.union (StringSet.diff fvs delete) live) in
       let bound_interfere = help_C bound in
@@ -1089,7 +1088,7 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) (delete :
           (add_node bound_interfere name)
       in
       merge_two new_graph (interfere body (StringSet.add name live) delete)
-  | ALetRec (binds, body, (fvs, _)) ->
+  | ALetRec (binds, body, (_, _)) ->
       let xs, es = List.split binds in
       let lam_free_vars =
         StringSet.diff
@@ -1630,17 +1629,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-    else [] )
+      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+      else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-    then []
-    else
-      [ IInstrComment
-          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-            sprintf "Popping %d arguments" num_stack_args ) ] )
+      then []
+      else
+        [ IInstrComment
+            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+              sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]

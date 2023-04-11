@@ -1,0 +1,8 @@
+-   [ ] free_vars_cache
+-   [ ] interfere
+-   [ ] color_graph
+-   [ ] gc
+-   [ ] input files
+-   [ ] move in compile tests
+-   [ ] new reg compilation
+-   [ ] reg alloc unit tests
