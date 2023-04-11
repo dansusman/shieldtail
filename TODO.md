@@ -5,4 +5,4 @@
 -   [ ] input files
 -   [ ] move in compile tests
 -   [ ] new reg compilation
--   [ ] reg alloc unit tests
+-   [x] reg alloc unit tests

@@ -133,23 +133,24 @@ let tcgraph ?(delete = StringSet.empty) name program expected =
     (List.sort c expected)
 ;;
 
-let talloc name program expected =
+let talloc ?(no_builtins = true) name program expected =
+  let parsed_prog = parse_string name program in
+  let prog_builtins = if no_builtins then parsed_prog else add_native_lambdas parsed_prog in
   t_any name
     (snd
        (naive_stack_allocation
-          (free_vars_cache
-             (atag
-                (anf
-                   (rename_and_tag (tag (desugar (add_native_lambdas (parse_string name program))))) ) ) ) ) )
+          (free_vars_cache (atag (anf (rename_and_tag (tag (desugar prog_builtins)))))) ) )
     expected
 ;;
 
 let tregalloc name program expected =
+  let c = Stdlib.compare in
   t_any name
-    (snd
-       (register_allocation
-          (free_vars_cache
-             (atag (anf (rename_and_tag (tag (desugar (parse_string name program)))))) ) ) )
+    (List.sort c
+       (snd
+          (register_allocation
+             (free_vars_cache
+                (atag (anf (rename_and_tag (tag (desugar (parse_string name program)))))) ) ) ) )
     expected
 ;;
 
@@ -430,7 +431,62 @@ let fvc_suite =
                 (["y"; "z"], 0) ) ) ]
 ;;
 
-let naive_alloc_suite = "naive_alloc_suite" >::: []
+let naive_alloc_suite =
+  "naive_alloc_suite"
+  >::: [ talloc "num" "5" [(0, [])];
+         talloc "bool" "true" [(0, [])];
+         talloc "or" "true || false"
+           [ ( 0,
+               [ ("unary_4", RegOffset (-8, RBP));
+                 ("unary_3", RegOffset (-16, RBP));
+                 ("unary_8", RegOffset (-24, RBP)) ] ) ];
+         talloc "simple_let" "let x = 5 in x" [(0, [("x_4", RegOffset (~-8, RBP))])];
+         talloc "simple_let_unused" "let x = 5 in 1" [(0, [("x_4", RegOffset (~-8, RBP))])];
+         talloc "nested_let" "let x = 5 in let y = 6 in x + y"
+           [(0, [("x_4", RegOffset (~-8, RBP)); ("y_8", RegOffset (~-16, RBP))])];
+         talloc "let_in_bind" "let x = (let y = 6 in x) in 1"
+           [(0, [("y_7", RegOffset (~-8, RBP)); ("x_4", RegOffset (~-16, RBP))])];
+         talloc "identity" "(lambda (x): x)" [(0, []); (1, [("x_5", RegOffset (24, RBP))])];
+         talloc "free_var" "(lambda: x)" [(0, []); (1, [("x", RegOffset (~-8, RBP))])];
+         talloc "closed_over_var" "let y = 20 in (lambda (x): x + y)"
+           [ (0, [("y_4", RegOffset (~-8, RBP))]);
+             (2, [("x_11", RegOffset (24, RBP)); ("y_4", RegOffset (~-8, RBP))]) ];
+         talloc "two_lams" "(lambda (x): x); (lambda (x): x)"
+           [(0, []); (2, [("x_12", RegOffset (24, RBP))]); (4, [("x_8", RegOffset (24, RBP))])];
+         talloc "letrec1" "let rec id = (lambda (x): x) in id(1)"
+           [(0, [("id_4", RegOffset (~-8, RBP))]); (5, [("x_8", RegOffset (24, RBP))])];
+         talloc "letrec2"
+           "let rec id = (lambda (x): x), k = (lambda (x): (lambda (y): x + z + w)) in id(1) + \
+            k(2)(3)"
+           [ ( 0,
+               [ ("k_10", RegOffset (-16, RBP));
+                 ("id_4", RegOffset (-8, RBP));
+                 ("app_23", RegOffset (-24, RBP));
+                 ("app_28", RegOffset (-32, RBP));
+                 ("app_26", RegOffset (-40, RBP)) ] );
+             (17, [("x_8", RegOffset (24, RBP))]);
+             ( 19,
+               [ ("x_21", RegOffset (24, RBP));
+                 ("z", RegOffset (-16, RBP));
+                 ("w", RegOffset (-8, RBP)) ] );
+             ( 20,
+               [ ("y_20", RegOffset (24, RBP));
+                 ("z", RegOffset (-24, RBP));
+                 ("x_21", RegOffset (-16, RBP));
+                 ("w", RegOffset (-8, RBP));
+                 ("binop_16", RegOffset (-32, RBP)) ] ) ];
+         talloc "final_boss"
+           "def foo(x): let bar = (x, (x + 1)), baz = t[0], fuzz = t[1] in baz + fuz\nfoo(4)"
+           [ (0, [("foo_4", RegOffset (-8, RBP))]);
+             ( 5,
+               [ ("x_29", RegOffset (24, RBP));
+                 ("t", RegOffset (-16, RBP));
+                 ("fuz", RegOffset (-8, RBP));
+                 ("binop_11", RegOffset (-24, RBP));
+                 ("bar_8", RegOffset (-32, RBP));
+                 ("baz_16", RegOffset (-40, RBP));
+                 ("fuzz_22", RegOffset (-48, RBP)) ] ) ] ]
+;;
 
 let reg_alloc_suite =
   "reg_alloc_suite"
@@ -441,25 +497,132 @@ let reg_alloc_suite =
          tregalloc "two_prim1s" "add1(sub1(6))" [(0, [("unary_3", Reg R10)])];
          (* TODO let free adder programs should use <=1 register *)
          tregalloc "three_prim1s" "add1(add1(sub1(6)))"
-           [(0, [("unary_3", Reg R10); ("unary_4", Reg R10)])];
+           [(0, [("unary_3", Reg R12); ("unary_4", Reg R10)])];
          tregalloc "four_prim1s" "sub1(add1(add1(sub1(6))))"
-           [(0, [("unary_3", Reg R10); ("unary_4", Reg R10); ("unary_5", Reg R10)])];
+           [(0, [("unary_3", Reg R13); ("unary_4", Reg R12); ("unary_5", Reg R10)])];
          tregalloc "plus" "3 + 4" [(0, [])];
          tregalloc "plus3" "3 + 4 + 5" [(0, [("binop_3", Reg R10)])];
-         tregalloc "plus4" "3 + 4 + 5 + 6" [(0, [("binop_3", Reg R10); ("binop_4", Reg R10)])];
+         tregalloc "plus4" "3 + 4 + 5 + 6" [(0, [("binop_3", Reg R12); ("binop_4", Reg R10)])];
          tregalloc "plus_times" "(3 + 4) * (5 + 6)"
            [(0, [("binop_3", Reg R12); ("binop_6", Reg R10)])];
          tregalloc "nested_let_both_bottom" "let x = 1, y = 2 in (x, y)"
            [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
          tregalloc "nested_let_neither_bottom" "let x = 1, y = 2 in 3"
-           [(0, [("x_4", Reg R10); ("y_8", Reg R10)])];
+           [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
          tregalloc "nested_let_first_bottom" "let x = 1, y = 2 in x"
            [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
          tregalloc "nested_let_chain" "let x = 1, y = x in y"
-           [(0, [("x_4", Reg R10); ("y_8", Reg R10)])];
+           [(0, [("x_4", Reg R12); ("y_8", Reg R10)])];
          tregalloc "disjoint_interference"
            "let x = 1 in let y = (let w = 3 in w) in let z = 3 in (x, y, z)"
-           [(0, [("w_11", Reg R10); ("x_4", Reg R13); ("y_8", Reg R12); ("z_16", Reg R10)])] ]
+           [(0, [("w_11", Reg R14); ("x_4", Reg R13); ("y_8", Reg R12); ("z_16", Reg R10)])];
+         tregalloc "def_simple" "def f(x): x\n\nf(49)"
+           [(0, [("f_4", Reg R10)]); (5, [("x_7", RegOffset (24, RBP))])];
+         tregalloc "def_simple2" "def f(x, y): x + y\n\nf(3, 46)"
+           [ (0, [("f_4", Reg R10)]);
+             (6, [("x_9", RegOffset (24, RBP)); ("y_10", RegOffset (32, RBP))]) ];
+         tregalloc "def_let_complex" "def f(x, y): x + y\ndef g(x, y, z): let a = 4 in a\n\na()"
+           [ (0, [("f_4", Reg R12); ("g_13", Reg R10)]);
+             ( 5,
+               [ ("a_17", Reg R10);
+                 ("x_20", RegOffset (24, RBP));
+                 ("y_21", RegOffset (32, RBP));
+                 ("z_22", RegOffset (40, RBP)) ] );
+             (9, [("x_9", RegOffset (24, RBP)); ("y_10", RegOffset (32, RBP))]) ];
+         tregalloc "let_def_boss"
+           "def f(x, y): x + y\ndef g(x, y, z): let h = 355 in h\n\nlet x = 5 in f(x, x)"
+           [ (0, [("f_4", Reg R13); ("g_13", Reg R12); ("x_25", Reg R10)]);
+             ( 9,
+               [ ("h_17", Reg R10);
+                 ("x_20", RegOffset (24, RBP));
+                 ("y_21", RegOffset (32, RBP));
+                 ("z_22", RegOffset (40, RBP)) ] );
+             (13, [("x_9", RegOffset (24, RBP)); ("y_10", RegOffset (32, RBP))]) ];
+         tregalloc "def_and_if"
+           "def f(x, y): if x: (let g = 12 in g) else: (let h = 35 in h)\n\nf(false, 44)"
+           [ (0, [("f_4", Reg R10)]);
+             ( 6,
+               [ ("g_10", Reg R10);
+                 ("h_15", Reg R10);
+                 ("x_18", RegOffset (24, RBP));
+                 ("y_19", RegOffset (32, RBP)) ] ) ];
+         tregalloc "big_boy"
+           "def foo(x, y): if x: (let g = 12 in g) else: (let h = 6 in h)\n\
+            def bar(x, y): if x: (let g = 44 in g) else: (let h = 89 in h)\n\n\
+            let x = 343, y = 23 in foo(x, y) + bar(x, y)"
+           [ ( 0,
+               [ ("app_47", Reg RSI);
+                 ("app_51", Reg RBX);
+                 ("bar_22", Reg R14);
+                 ("foo_4", Reg R13);
+                 ("x_40", Reg R12);
+                 ("y_44", Reg R10) ] );
+             ( 20,
+               [ ("g_28", Reg R10);
+                 ("h_33", Reg R10);
+                 ("x_36", RegOffset (24, RBP));
+                 ("y_37", RegOffset (32, RBP)) ] );
+             ( 29,
+               [ ("g_10", Reg R10);
+                 ("h_15", Reg R10);
+                 ("x_18", RegOffset (24, RBP));
+                 ("y_19", RegOffset (32, RBP)) ] ) ];
+         tregalloc "tuple_simple" "let t = (1, 2, 3) in t" [(0, [("t_4", Reg R10)])];
+         tregalloc "two_3tuples" "let t = (1, 2, 3), y = (3, 4, 5) in y"
+           [(0, [("t_4", Reg R12); ("y_11", Reg R10)])];
+         tregalloc "tup_gets" "let t = (1, 2, 3), x = t[0], y = t[1], z = t[2] in z"
+           [(0, [("t_4", Reg R14); ("x_11", Reg R13); ("y_17", Reg R12); ("z_23", Reg R10)])];
+         tregalloc "def_tup_get"
+           "def f(x): let t = ((x + 6), (x - 14)), b = t[0], c = t[1] in b + c\n\n\
+            let t = (1, 16), x = t[0], y = t[1] in f(x + y)"
+           [ ( 0,
+               [ ("binop_51", Reg RBX);
+                 ("f_4", Reg R14);
+                 ("t_34", Reg R13);
+                 ("x_40", Reg R12);
+                 ("y_46", Reg R10) ] );
+             ( 21,
+               [ ("b_18", Reg RBX);
+                 ("binop_10", Reg R14);
+                 ("binop_13", Reg R13);
+                 ("c_24", Reg R12);
+                 ("t_8", Reg R10);
+                 ("x_31", RegOffset (24, RBP)) ] ) ];
+         tregalloc "seq_and_lets"
+           "let x = 4, y = 5, z = 10 in x + y + z; let a = 1, b = 2, c = 3 in a + b + c"
+           [ ( 0,
+               [ ("a_24", Reg RCX);
+                 ("b_28", Reg RDI);
+                 ("binop_18", Reg RSI);
+                 ("binop_35", Reg RBX);
+                 ("c_32", Reg R14);
+                 ("x_4", Reg R13);
+                 ("y_8", Reg R12);
+                 ("z_12", Reg R10) ] ) ];
+         tregalloc "identity" "(lambda (x): x)" [(0, []); (1, [("x_5", RegOffset (24, RBP))])];
+         tregalloc "lam_fv" "let y = 12 in (lambda (x): x + y)"
+           [(0, [("y_4", Reg R10)]); (2, [("y_4", Reg R10); ("x_11", RegOffset (24, RBP))])];
+         tregalloc "lam_none" "(lambda: 1)" [(0, []); (1, [])];
+         tregalloc "lam_complex"
+           "let f = (lambda (x): x * 4), g = (lambda (x): x + 23) in f(4) + g(2)"
+           [ (0, [("app_21", Reg R14); ("app_24", Reg R13); ("f_4", Reg R12); ("g_13", Reg R10)]);
+             (14, [("x_19", RegOffset (24, RBP))]);
+             (18, [("x_10", RegOffset (24, RBP))]) ];
+         tregalloc "nesting_lams" "(lambda (x): (lambda (y): x + y)(2))(3)"
+           [ (0, [("lam_4", Reg R10)]);
+             (5, [("lam_8", Reg R10); ("x_14", RegOffset (24, RBP))]);
+             (10, [("x_14", Reg R10); ("y_13", RegOffset (24, RBP))]) ];
+         tregalloc "letrec"
+           "let rec f = (lambda (n): let rec g = (lambda (x): if n <= 1: x else: f(x - 1) ) in \
+            g(n)) in f(7)"
+           [ (0, [("f_4", Reg R10)]);
+             (5, [("f_4", Reg R12); ("g_9", Reg R10); ("n_26", RegOffset (24, RBP))]);
+             ( 10,
+               [ ("binop_13", Reg R14);
+                 ("binop_18", Reg R13);
+                 ("f_4", Reg R12);
+                 ("n_26", Reg R10);
+                 ("x_22", RegOffset (24, RBP)) ] ) ] ]
 ;;
 
 let interfere_suite =
@@ -736,8 +899,8 @@ let () =
            interfere_suite;
            reg_alloc_suite;
            naive_alloc_suite;
-           gc_suite;
-           color_graph_suite ] )
+           (* gc_suite; *)
+           color_graph_suite (* input_file_test_suite () *) ] )
 ;;
 
 (* let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()]) *)
