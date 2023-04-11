@@ -90,6 +90,23 @@ let caller_saved_regs : arg list = [Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; 
 
 let callee_saved_regs : arg list = [Reg R12; Reg R14; Reg RBX]
 
+let reg_priority = List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
+
+let clear_registers =
+  [ILineComment "clear registers"]
+  @ List.concat_map (fun reg -> [IMov (reg, HexConst (Int64.of_int 0))]) reg_priority
+;;
+
+let push_callees =
+  [ILineComment "push callee save regisers"]
+  @ List.concat_map (fun reg -> [IPush reg]) callee_saved_regs
+;;
+
+let pop_callees =
+  [ILineComment "pop callee save regisers"]
+  @ List.rev (List.concat_map (fun reg -> [IPop reg]) callee_saved_regs)
+;;
+
 let heap_reg = R15
 
 let scratch_reg = R11
@@ -1034,7 +1051,6 @@ let naive_stack_allocation (prog : (StringSet.t * tag) aprogram) :
     match e with
     | CIf (_, t, e, _) ->
         let then_env, then_si = allocate_A t si lambda_tag in
-        (* TODO come back and optimize this *)
         let else_env, else_si = allocate_A e then_si lambda_tag in
         (then_env @ else_env, max then_si else_si)
     | CLambda (args, body, (fvs, tag)) ->
@@ -1112,9 +1128,6 @@ let rec interfere (e : (StringSet.t * tag) aexpr) (live : StringSet.t) (delete :
 let min_unused_reg (used : arg list) : arg =
   (* TODO make sure to push and pop native call regs if needed *)
   (* NOTE: excluding R11 because it's our scratch_reg *)
-  let reg_priority =
-    List.map (fun r -> Reg r) [R10; R12; R13; R14; RBX; RSI; RDI; RCX; RDX; R8; R9]
-  in
   let rec min_color_help (reg_priority : arg list) (stack_height : int) : arg =
     match reg_priority with
     | [] ->
@@ -1618,6 +1631,11 @@ and args_help args regs =
   | args, [] -> List.rev_map (fun arg -> IPush arg) args
   | [], _ -> []
 
+and save_regs =
+  let saved_data = List.map (fun r -> IPush r) reg_priority in
+  let restore_data = List.map (fun r -> IPop r) (List.rev reg_priority) in
+  (saved_data, restore_data)
+
 and native_call label args =
   (* We know that on entry to every function, RSP is 16-byte aligned.
      We know that every frame is a multiple of 16 bytes.
@@ -1645,7 +1663,8 @@ and native_call label args =
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
     else []
   in
-  setup @ [ICall label] @ teardown
+  let pushes, pops = save_regs in
+  pushes @ setup @ [ICall label] @ teardown @ pops
 
 and call (closure : arg) args =
   let arity = List.length args in
@@ -1667,7 +1686,10 @@ and call (closure : arg) args =
           ( IAdd (Reg RSP, Const (Int64.of_int (word_size * (arity + 1)))),
             sprintf "Popping %d arguments" (arity + 1) ) ]
   in
-  setup @ arity_checks @ pass_args @ pushSelf @ [ICall (RegOffset (word_size, RAX))] @ teardown
+  let pushes, pops = save_regs in
+  setup @ arity_checks @ pushes @ pass_args @ pushSelf
+  @ [ICall (RegOffset (word_size, RAX))]
+  @ teardown @ pops
 ;;
 
 (* This function can be used to take the native functions and produce DFuns whose bodies
@@ -1779,7 +1801,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
         @ native_call (Label "?set_stack_bottom") [Reg RBP]
         @ [IMov (Reg RDI, Reg R12)]
       in
-      let main = prologue @ heap_start @ set_stack_bottom @ comp_main @ epilogue in
+      let main =
+        prologue @ push_callees @ heap_start @ set_stack_bottom @ clear_registers @ comp_main
+        @ pop_callee_saved_registers @ epilogue
+      in
       sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
 

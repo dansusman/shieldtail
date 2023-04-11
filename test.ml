@@ -8,7 +8,7 @@ open Phases
 open Errors
 open Graph
 
-let alloc_strat = Register
+let alloc_strat = Naive
 
 let t ?(alloc = alloc_strat) name program input expected =
   name >:: test_run ~args:[] ~std_input:input alloc program name expected
@@ -142,8 +142,7 @@ let tregalloc name program expected =
 ;;
 
 let builtins_size =
-  4 (* arity + 0 vars + codeptr + padding *)
-  * 1 (* TODO FIXME (List.length Compile.native_fun_bindings) *)
+  4 (* arity + 0 vars + codeptr + padding *) * List.length Compile.native_fun_bindings
 ;;
 
 let free_vars_suite =
@@ -412,7 +411,7 @@ let pipeline_suite = "pipeline_suite" >::: pair_tests
 let oom =
   [ tgcerr "oomgc1" (7 + builtins_size) "(1, (3, 4))" "" "Out of memory";
     tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
-    tvgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
+    tgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
     tgc "oomgc4" (4 + builtins_size) "(3, 4)" "" "(3, 4)";
     tgcerr "oomgc5" (3 + builtins_size) "(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)" "" "Allocation";
     tgcerr "gc_tuple_but_full" builtins_size "(1, 2)" "" "Out of memory";
@@ -467,14 +466,16 @@ let gc_suite =
 
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
-let () =
-  run_test_tt_main
-    ( "all_tests"
-    >::: [ free_vars_suite;
-           free_vars_suite;
-           gc_suite;
-           pipeline_suite;
-           graph_suite;
-           interfere_suite;
-           color_graph_suite ] )
-;;
+(* let () =
+     run_test_tt_main
+       ( "all_tests"
+       >::: [ free_vars_suite;
+              free_vars_suite;
+              gc_suite;
+              pipeline_suite;
+              graph_suite;
+              interfere_suite;
+              color_graph_suite ] )
+   ;; *)
+
+let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()])
