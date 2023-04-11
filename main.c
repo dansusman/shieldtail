@@ -281,7 +281,7 @@ SNAKEVAL input()
 
   if ((read_num > (LONG_MAX / 2)) || (read_num < (LONG_MIN / 2)))
   {
-    error(read_num * 2, ERR_OVERFLOW);
+    error(ERR_OVERFLOW, read_num * 2);
   }
 
   SNAKEVAL read_val = (SNAKEVAL)(read_num * 2);
