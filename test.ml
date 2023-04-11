@@ -405,8 +405,10 @@ let fvc_suite =
                             (["x"], 6) ),
                         ACExpr
                           (CApp
-                             (ImmId ("foo", (["foo"], 5)), [ImmNum (100L, ([], 4))], Unknown, (["foo"], 3))
-                          ),
+                             ( ImmId ("foo", (["foo"], 5)),
+                               [ImmNum (100L, ([], 4))],
+                               Unknown,
+                               (["foo"], 3) ) ),
                         (["x"], 2) ),
                     ([], 1) ),
                 ([], 0) ) );
@@ -725,13 +727,13 @@ let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123
 let () =
   run_test_tt_main
     ( "all_tests"
-    >::: [ (* free_vars_suite; *)
-           fvc_suite
-           (* gc_suite; *)
-           (* pipeline_suite;
-              graph_suite; *)
-           (* interfere_suite; *)
-           (* color_graph_suite *) ] )
+    >::: [ free_vars_suite;
+           fvc_suite;
+           pipeline_suite;
+           graph_suite;
+           interfere_suite;
+           gc_suite;
+           color_graph_suite ] )
 ;;
 
 (* let () = run_test_tt_main ("all_tests" >::: [input_file_test_suite ()]) *)
