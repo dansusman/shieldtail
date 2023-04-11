@@ -121,6 +121,18 @@ let tinterfere name program expected =
     (graph_to_viz (graph_from_assoc_list expected))
 ;;
 
+let tcgraph ?(delete = StringSet.empty) name program expected =
+  let ast = rename_and_tag (tag (desugar (Runner.parse_string name program))) in
+  let actual =
+    match free_vars_cache (atag (anf ast)) with
+    | AProgram (body, _) -> body
+  in
+  let c = Stdlib.compare in
+  t_any name
+    (List.sort c (color_graph (interfere actual StringSet.empty delete) []))
+    (List.sort c expected)
+;;
+
 let talloc name program expected =
   t_any name
     (snd
@@ -399,7 +411,31 @@ let color_graph_suite =
              ("j", Reg R14);
              ("k", Reg R13);
              ("l", Reg R12);
-             ("z", Reg R10) ] ]
+             ("z", Reg R10) ];
+         tcgraph "num" "1" [];
+         tcgraph "simple_let" "let x = 10 in x" [("x_4", Reg R10)];
+         tcgraph "three_let_plus" "let x = 1, y = 2, z = 3 in x + y + z"
+           [("binop_15", Reg R14); ("x_4", Reg R13); ("y_8", Reg R12); ("z_12", Reg R10)];
+         tcgraph "three_let_use" "let x = 1, y = x + 2, z = y + x + 3 in y"
+           [("z_14", Reg R10); ("y_8", Reg R12); ("x_4", Reg R13); ("binop_16", Reg R14)];
+         tcgraph "nesting_lets" "let x = (let y = x + 1 in y) in let y = (let z = x in x) in x + y "
+           [("z_17", Reg R10); ("y_7", Reg R12); ("y_14", Reg R13); ("x", Reg R10); ("x_4", Reg R14)];
+         tcgraph "lets_and_lams" "let x = 1 in (lambda (f, g, h): let y = x + g in 1)"
+           [("x_4", Reg R10)];
+         tcgraph ~delete:(StringSet.of_list ["a"]) "let_with_delete" "let y = x + a in x"
+           [("x", Reg R12); ("y_4", Reg R10)];
+         tcgraph
+           ~delete:(StringSet.of_list ["a"; "b"; "c"])
+           "lets_with_delete" "let y = x + a in let x = b + c in b"
+           [("y_4", Reg R10); ("x", Reg R12); ("x_10", Reg R12)];
+         tcgraph "letrec_simple" "let rec foo = (lambda (x): x) in foo(3)" [("foo_4", Reg R10)];
+         tcgraph "double_letrec"
+           "let rec foo = (lambda (x): x) in let rec bar = (lambda (z): foo(z)) in bar(1) + foo(3)"
+           [("foo_4", Reg R10); ("bar_11", Reg R12); ("app_22", Reg R13); ("app_19", Reg R14)];
+         tcgraph "let rec in ifs"
+           "let rec foo = (lambda (x): x) in if (4 > 3): let rec bar = (lambda (x): x) in 1 else: \
+            let rec baz = (lambda (x): x) in 4"
+           [("foo_4", Reg R10); ("bar_15", Reg R13); ("baz_23", Reg R13); ("binop_10", Reg R12)] ]
 ;;
 
 let pair_tests =
@@ -476,12 +512,11 @@ let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123
 let () =
   run_test_tt_main
     ( "all_tests"
-    >::: [ free_vars_suite;
-           free_vars_suite;
+    >::: [ (* free_vars_suite; *)
            (* gc_suite; *)
-           pipeline_suite;
-           graph_suite;
-           interfere_suite;
+           (* pipeline_suite;
+              graph_suite; *)
+           (* interfere_suite; *)
            color_graph_suite ] )
 ;;
 

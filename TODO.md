@@ -1,6 +1,6 @@
 -   [ ] free_vars_cache
 -   [x] interfere
--   [ ] color_graph
+-   [x] color_graph
 -   [ ] gc
 -   [ ] input files
 -   [ ] move in compile tests
