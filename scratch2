@@ -1,1 +1,18 @@
-[[0; ("f_4", Tag2 (11)); ("g_13", Tag2 (9))]; [5; ("a_17", Tag2 (9)); ("x_20", Tag3 (24, 2)); ("y_21", Tag3 (32, 2)); ("z_22", Tag3 (40, 2))]; [9; ("x_9", Tag3 (24, 2)); ("y_10", Tag3 (32, 2))]]
+mov RAX, 8
+  mov [RBP-8], RAX ; binding x#1 at tag 1
+  mov RAX, [RBP-8]
+  and RAX, 0x1
+  mov R11, [RBP-8]
+  cmp RAX, 0
+  jne near ?err_arith_not_num
+  mov RAX, 4
+  and RAX, 0x1
+  mov R11, 4
+  cmp RAX, 0
+  jne near ?err_arith_not_num
+  mov RAX, [RBP-8]
+  mov R11, 4
+  add RAX, R11
+  jo near ?err_overflow
+  mov [RBP-16], RAX ; binding x#2 at tag 1
+  mov RAX, [RBP-16]

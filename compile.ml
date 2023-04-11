@@ -958,60 +958,63 @@ let get_fv_info (e : 'a aexpr) : StringSet.t =
       ) )
 ;;
 
+let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
+  match e with
+  | CIf (c, t, e, tag) ->
+      let c_free = free_vars_I c in
+      let t_free = free_vars_A t in
+      let e_free = free_vars_A e in
+      CIf (c_free, t_free, e_free, (free_vars e, tag))
+  | CPrim1 (p, op, tag) -> CPrim1 (p, free_vars_I op, (free_vars (ACExpr e), tag))
+  | CPrim2 (p, op1, op2, tag) ->
+      let op1_free = free_vars_I op1 in
+      let op2_free = free_vars_I op2 in
+      CPrim2 (p, op1_free, op2_free, (free_vars (ACExpr e), tag))
+  | CApp (f, args, Native, tag) ->
+      CApp (free_vars_I f, List.map free_vars_I args, Native, (free_vars (ACExpr e), tag))
+  | CApp (func, args, ct, tag) ->
+      let func_free = free_vars_I func in
+      let args_free = List.map free_vars_I args in
+      CApp (func_free, args_free, ct, (free_vars (ACExpr e), tag))
+  | CTuple (els, tag) -> CTuple (List.map free_vars_I els, (free_vars (ACExpr e), tag))
+  | CGetItem (tup, idx, tag) ->
+      let tup_free = free_vars_I tup in
+      let idx_free = free_vars_I idx in
+      CGetItem (tup_free, idx_free, (free_vars (ACExpr e), tag))
+  | CSetItem (tup, idx, new_val, tag) ->
+      let tup_free = free_vars_I tup in
+      let idx_free = free_vars_I idx in
+      let new_val_free = free_vars_I new_val in
+      CSetItem (tup_free, idx_free, new_val_free, (free_vars (ACExpr e), tag))
+  | CLambda (args, body, tag) -> CLambda (args, free_vars_A body, (free_vars (ACExpr e), tag))
+  | CImmExpr i -> CImmExpr (free_vars_I i)
+
+and free_vars_I (e : 'a immexpr) : (StringSet.t * 'a) immexpr =
+  match e with
+  | ImmNum (n, tag) -> ImmNum (n, (free_vars (ACExpr (CImmExpr e)), tag))
+  | ImmBool (b, tag) -> ImmBool (b, (free_vars (ACExpr (CImmExpr e)), tag))
+  | ImmNil tag -> ImmNil (free_vars (ACExpr (CImmExpr e)), tag)
+  | ImmId (id, tag) -> ImmId (id, (free_vars (ACExpr (CImmExpr e)), tag))
+
+and free_vars_A (e : 'a aexpr) : (StringSet.t * 'a) aexpr =
+  match e with
+  | ASeq (f, s, tag) ->
+      let f_free = free_vars_C f in
+      let s_free = free_vars_A s in
+      ASeq (f_free, s_free, (free_vars e, tag))
+  | ALet (name, value, body, tag) ->
+      let value_free = free_vars_C value in
+      let body_free = free_vars_A body in
+      ALet (name, value_free, body_free, (free_vars e, tag))
+  | ALetRec (binds, body, tag) ->
+      let names, values = List.split binds in
+      let values_free = List.map free_vars_C values in
+      let body_free = free_vars_A body in
+      ALetRec (List.combine names values_free, body_free, (free_vars e, tag))
+  | ACExpr c -> ACExpr (free_vars_C c)
+;;
+
 let free_vars_cache (prog : 'a aprogram) : (StringSet.t * 'a) aprogram =
-  let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
-    match e with
-    | CIf (c, t, e, tag) ->
-        let c_free = free_vars_I c in
-        let t_free = free_vars_A t in
-        let e_free = free_vars_A e in
-        CIf (c_free, t_free, e_free, (free_vars e, tag))
-    | CPrim1 (p, op, tag) -> CPrim1 (p, free_vars_I op, (free_vars (ACExpr e), tag))
-    | CPrim2 (p, op1, op2, tag) ->
-        let op1_free = free_vars_I op1 in
-        let op2_free = free_vars_I op2 in
-        CPrim2 (p, op1_free, op2_free, (free_vars (ACExpr e), tag))
-    | CApp (f, args, Native, tag) ->
-        CApp (free_vars_I f, List.map free_vars_I args, Native, (free_vars (ACExpr e), tag))
-    | CApp (func, args, ct, tag) ->
-        let func_free = free_vars_I func in
-        let args_free = List.map free_vars_I args in
-        CApp (func_free, args_free, ct, (free_vars (ACExpr e), tag))
-    | CTuple (els, tag) -> CTuple (List.map free_vars_I els, (free_vars (ACExpr e), tag))
-    | CGetItem (tup, idx, tag) ->
-        let tup_free = free_vars_I tup in
-        let idx_free = free_vars_I idx in
-        CGetItem (tup_free, idx_free, (free_vars (ACExpr e), tag))
-    | CSetItem (tup, idx, new_val, tag) ->
-        let tup_free = free_vars_I tup in
-        let idx_free = free_vars_I idx in
-        let new_val_free = free_vars_I new_val in
-        CSetItem (tup_free, idx_free, new_val_free, (free_vars (ACExpr e), tag))
-    | CLambda (args, body, tag) -> CLambda (args, free_vars_A body, (free_vars (ACExpr e), tag))
-    | CImmExpr i -> CImmExpr (free_vars_I i)
-  and free_vars_I (e : 'a immexpr) : (StringSet.t * 'a) immexpr =
-    match e with
-    | ImmNum (n, tag) -> ImmNum (n, (free_vars (ACExpr (CImmExpr e)), tag))
-    | ImmBool (b, tag) -> ImmBool (b, (free_vars (ACExpr (CImmExpr e)), tag))
-    | ImmNil tag -> ImmNil (free_vars (ACExpr (CImmExpr e)), tag)
-    | ImmId (id, tag) -> ImmId (id, (free_vars (ACExpr (CImmExpr e)), tag))
-  and free_vars_A (e : 'a aexpr) : (StringSet.t * 'a) aexpr =
-    match e with
-    | ASeq (f, s, tag) ->
-        let f_free = free_vars_C f in
-        let s_free = free_vars_A s in
-        ASeq (f_free, s_free, (free_vars e, tag))
-    | ALet (name, value, body, tag) ->
-        let value_free = free_vars_C value in
-        let body_free = free_vars_A body in
-        ALet (name, value_free, body_free, (free_vars e, tag))
-    | ALetRec (binds, body, tag) ->
-        let names, values = List.split binds in
-        let values_free = List.map free_vars_C values in
-        let body_free = free_vars_A body in
-        ALetRec (List.combine names values_free, body_free, (free_vars e, tag))
-    | ACExpr c -> ACExpr (free_vars_C c)
-  in
   match prog with
   | AProgram (body, tag) -> AProgram (free_vars_A body, (free_vars body, tag))
 ;;

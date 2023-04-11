@@ -7,12 +7,17 @@ open Exprs
 open Phases
 open Errors
 open Graph
+open Assembly
 
 let alloc_strat = Naive
 
 let t ?(alloc = alloc_strat) name program input expected =
   name >:: test_run ~args:[] ~std_input:input alloc program name expected
 ;;
+
+let te name program expected_err = name >:: test_err Naive program name expected_err
+
+let t_error name error thunk = name >:: fun _ -> assert_raises error thunk
 
 let ta name program input expected =
   name >:: test_run_anf ~args:[] ~std_input:input program name expected
@@ -39,9 +44,11 @@ let tgcerr ?(alloc = alloc_strat) name heap_size program input expected =
   name >:: test_err ~args:[string_of_int heap_size] ~std_input:input alloc program name expected
 ;;
 
-let tanf name program input expected =
+let tanf name program expected =
   name >:: fun _ -> assert_equal expected (anf (tag program)) ~printer:string_of_aprogram
 ;;
+
+let t_asm name value expected = name >:: fun _ -> assert_equal expected value ~printer:to_asm
 
 let tparse name program expected =
   name
@@ -889,6 +896,938 @@ let gc_suite = "gc_suite" >::: oom @ gc
 
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
+let compile_aexpr_suite =
+  "compile_aexpr_suite"
+  >::: [ t_error "x_not_found" (InternalCompilerError "Name x not found in tag env 1") (fun _ ->
+             compile_aexpr
+               (free_vars_A
+                  (ALet ("x", CImmExpr (ImmNum (4L, 3)), ACExpr (CImmExpr (ImmNum (2L, 4))), 1)) )
+               [] 1 "" );
+         t_asm "compile_let_no_use"
+           (compile_aexpr
+              (free_vars_A
+                 (ALet ("x", CImmExpr (ImmNum (4L, 3)), ACExpr (CImmExpr (ImmNum (2L, 4))), 1)) )
+              [(1, [("x", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, Const 8L);
+             IInstrComment (IMov (RegOffset (-8, RBP), Reg RAX), "binding x at tag 1");
+             IMov (Reg RAX, Const 4L) ];
+         t_asm "compile_simple_let1"
+           (compile_aexpr
+              (free_vars_A
+                 (ALet ("x", CImmExpr (ImmNum (4L, 3)), ACExpr (CImmExpr (ImmId ("x", 4))), 1)) )
+              [(1, [("x", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, Const 8L);
+             IInstrComment (IMov (RegOffset (-8, RBP), Reg RAX), "binding x at tag 1");
+             IMov (Reg RAX, RegOffset (-8, RBP)) ];
+         t_asm "compile_shadowing_let"
+           (compile_aexpr
+              (free_vars_A
+                 (ALet
+                    ( "x#1",
+                      CImmExpr (ImmNum (4L, 7)),
+                      ALet
+                        ( "x#2",
+                          CPrim2 (Plus, ImmId ("x#1", 6), ImmNum (2L, 5), 4),
+                          ACExpr (CImmExpr (ImmId ("x#2", 3))),
+                          2 ),
+                      1 ) ) )
+              [(1, [("x#1", RegOffset (-8, RBP)); ("x#2", RegOffset (-16, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, Const 8L);
+             IInstrComment (IMov (RegOffset (-8, RBP), Reg RAX), "binding x#1 at tag 1");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, RegOffset (-8, RBP));
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, Const 4L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 4L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             IMov (Reg R11, Const 4L);
+             IAdd (Reg RAX, Reg R11);
+             IJo (Label "?err_overflow");
+             IInstrComment (IMov (RegOffset (-16, RBP), Reg RAX), "binding x#2 at tag 1");
+             IMov (Reg RAX, RegOffset (-16, RBP)) ] ]
+;;
+
+let compile_cexpr_suite =
+  "compile_cexpr_suite"
+  >::: [ t_asm "compile_number"
+           (compile_cexpr (free_vars_C (CImmExpr (ImmNum (45L, 1)))) [] 1 "")
+           [IMov (Reg RAX, Const 90L)];
+         t_asm "compile_true"
+           (compile_cexpr (free_vars_C (CImmExpr (ImmBool (true, 1)))) [] 1 "")
+           [IMov (Reg RAX, HexConst (-1L))];
+         t_asm "compile_false"
+           (compile_cexpr (free_vars_C (CImmExpr (ImmBool (false, 1)))) [] 1 "")
+           [IMov (Reg RAX, HexConst 9223372036854775807L)];
+         t_asm "compile_id"
+           (compile_cexpr
+              (free_vars_C (CImmExpr (ImmId ("x#1", 1))))
+              [(1, [("x#1", RegOffset (-8, RBP))])]
+              1 "" )
+           [IMov (Reg RAX, RegOffset (-8, RBP))];
+         t_asm "compile_is_bool"
+           (compile_cexpr (free_vars_C (CPrim1 (IsBool, ImmBool (true, 1), 2))) [] 1 "")
+           [ IMov (Reg RAX, HexConst (-1L));
+             IAnd (Reg RAX, HexConst 7L);
+             ICmp (Reg RAX, Const 7L);
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
+             IJe (Label "is_bool_2");
+             IMov (Reg RAX, HexConst 0x7fffffffffffffffL);
+             ILabel "is_bool_2" ];
+         t_asm "compile_is_num"
+           (compile_cexpr (free_vars_C (CPrim1 (IsNum, ImmNum (2L, 1), 2))) [] 1 "")
+           [ IMov (Reg RAX, Const 4L);
+             IAnd (Reg RAX, HexConst 1L);
+             ICmp (Reg RAX, Const 0L);
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
+             IJe (Label "is_num_2");
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ILabel "is_num_2" ];
+         t_asm "compile_is_tup"
+           (compile_cexpr (free_vars_C (CPrim1 (IsTuple, ImmBool (false, 1), 2))) [] 1 "")
+           [ IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             IAnd (Reg RAX, HexConst 7L);
+             ICmp (Reg RAX, Const 1L);
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
+             IJe (Label "is_tup_2");
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ILabel "is_tup_2" ];
+         t_asm "compile_add1"
+           (compile_cexpr (free_vars_C (CPrim1 (Add1, ImmNum (5L, 2), 1))) [] 1 "")
+           [ IMov (Reg RAX, Const 10L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 10L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, Const 10L);
+             IAdd (Reg RAX, Const 2L);
+             IJo (Label "?err_overflow") ];
+         t_asm "compile_sub1"
+           (compile_cexpr (free_vars_C (CPrim1 (Sub1, ImmNum (5L, 2), 1))) [] 1 "")
+           [ IMov (Reg RAX, Const 10L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 10L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, Const 10L);
+             IAdd (Reg RAX, Const (-2L));
+             IJo (Label "?err_overflow") ];
+         t_asm "compile_eq"
+           (compile_cexpr
+              (free_vars_C (CPrim2 (Eq, ImmNum (3L, 1), ImmBool (false, 2), 3)))
+              [] 1 "" )
+           [ IMov (Reg RAX, Const 6L);
+             IMov (Reg R11, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ICmp (Reg RAX, Reg R11);
+             IMov (Reg RAX, HexConst (-1L));
+             IJe (Label "eq_3");
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ILabel "eq_3" ];
+         t_asm "compile_ge"
+           (compile_cexpr
+              (free_vars_C (CPrim2 (GreaterEq, ImmNum (12L, 1), ImmNum (10L, 2), 3)))
+              [] 1 "" )
+           [ IMov (Reg RAX, Const 24L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 24L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_comp_not_num");
+             IMov (Reg RAX, Const 20L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 20L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_comp_not_num");
+             IMov (Reg RAX, Const 24L);
+             IMov (Reg R11, Const 20L);
+             ICmp (Reg RAX, Reg R11);
+             IMov (Reg RAX, HexConst (-1L));
+             IJge (Label "greater_eq_3");
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ILabel "greater_eq_3" ];
+         t_asm "compile_prim2"
+           (compile_cexpr (free_vars_C (CPrim2 (Minus, ImmNum (4L, 3), ImmNum (3L, 8), 4))) [] 1 "")
+           [ IMov (Reg RAX, Const 8L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 8L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, Const 6L);
+             IAnd (Reg RAX, HexConst 1L);
+             IMov (Reg R11, Const 6L);
+             ICmp (Reg RAX, Const 0L);
+             IJne (Label "?err_arith_not_num");
+             IMov (Reg RAX, Const 8L);
+             IMov (Reg R11, Const 6L);
+             ISub (Reg RAX, Reg R11);
+             IJo (Label "?err_overflow") ];
+         t_asm "compile_if"
+           (compile_cexpr
+              (free_vars_C
+                 (CIf
+                    ( ImmBool (true, 4),
+                      ACExpr (CImmExpr (ImmNum (4L, 3))),
+                      ACExpr (CImmExpr (ImmNum (5L, 2))),
+                      1 ) ) )
+              [] 1 "" )
+           [ IMov (Reg RAX, HexConst (-1L));
+             IAnd (Reg RAX, HexConst 7L);
+             IMov (Reg R11, HexConst (-1L));
+             ICmp (Reg RAX, Const 7L);
+             IJne (Label "?err_if_not_bool");
+             IMov (Reg RAX, HexConst (-1L));
+             IMov (Reg R11, HexConst 0x7fffffffffffffffL);
+             ICmp (Reg RAX, Reg R11);
+             IJe (Label "if_false_1");
+             IMov (Reg RAX, Const 8L);
+             IJmp (Label "done_1");
+             ILabel "if_false_1";
+             IMov (Reg RAX, Const 10L);
+             ILabel "done_1" ];
+         t_asm "compile_if_with_fun"
+           (compile_cexpr
+              (free_vars_C
+                 (CIf
+                    ( ImmId ("foo_1", 1),
+                      ACExpr (CImmExpr (ImmNum (2L, 2))),
+                      ACExpr (CImmExpr (ImmNum (20L, 3))),
+                      4 ) ) )
+              [(1, [("foo_1", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, RegOffset (-8, RBP));
+             IAnd (Reg RAX, HexConst 7L);
+             IMov (Reg R11, RegOffset (-8, RBP));
+             ICmp (Reg RAX, Const 7L);
+             IJne (Label "?err_if_not_bool");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             IMov (Reg R11, HexConst 0x7fffffffffffffffL);
+             ICmp (Reg RAX, Reg R11);
+             IJe (Label "if_false_4");
+             IMov (Reg RAX, Const 4L);
+             IJmp (Label "done_4");
+             ILabel "if_false_4";
+             IMov (Reg RAX, Const 40L);
+             ILabel "done_4" ];
+         t_error "compile_or" (InternalCompilerError "And and or should've been desugared into ifs.")
+           (fun _ ->
+             compile_cexpr
+               (free_vars_C (CPrim2 (Or, ImmBool (false, 1), ImmBool (false, 2), 3)))
+               [] 1 "" );
+         t_error "compile_and"
+           (InternalCompilerError "And and or should've been desugared into ifs.") (fun _ ->
+             compile_cexpr
+               (free_vars_C (CPrim2 (And, ImmBool (false, 1), ImmBool (false, 2), 3)))
+               [] 1 "" );
+         t_asm "compile_fun_non_recursive_one_arg"
+           (compile_cexpr
+              (free_vars_C (CApp (ImmId ("foo", 2), [ImmNum (5L, 2)], Snake, 1)))
+              [(1, [("foo", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, RegOffset (-8, RBP));
+             IAnd (Reg RAX, HexConst 0x7L);
+             IMov (Reg R11, RegOffset (-8, RBP));
+             ICmp (Reg RAX, Const 5L);
+             IJne (Label "?err_call_not_closure");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             ISub (Reg RAX, HexConst 5L);
+             IMov (Reg R11, RegOffset (0, RAX));
+             ICmp (Reg R11, Const 1L);
+             IJne (Label "?err_call_arity_err");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Reg R11, Const 10L);
+             IPush (Reg R11);
+             IInstrComment (IPush (Sized (QWORD_PTR, RegOffset (-8, RBP))), "push closure to stack");
+             ICall (RegOffset (8, RAX));
+             IInstrComment (IAdd (Reg RSP, Const 16L), "Popping 2 arguments");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
+         t_asm "compile_fun_non_recursive_many_arg"
+           (compile_cexpr
+              (free_vars_C
+                 (CApp
+                    ( ImmId ("bar", 4),
+                      [ImmNum (5L, 0); ImmNum (5L, 1); ImmNum (5L, 2); ImmNum (5L, 3)],
+                      Snake,
+                      1 ) ) )
+              [(1, [("bar", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, RegOffset (-8, RBP));
+             IAnd (Reg RAX, HexConst 7L);
+             IMov (Reg R11, RegOffset (-8, RBP));
+             ICmp (Reg RAX, Const 5L);
+             IJne (Label "?err_call_not_closure");
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             ISub (Reg RAX, HexConst 5L);
+             IMov (Reg R11, RegOffset (0, RAX));
+             ICmp (Reg R11, Const 4L);
+             IJne (Label "?err_call_arity_err");
+             IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Reg R11, Const 10L);
+             IPush (Reg R11);
+             IMov (Reg R11, Const 10L);
+             IPush (Reg R11);
+             IMov (Reg R11, Const 10L);
+             IPush (Reg R11);
+             IMov (Reg R11, Const 10L);
+             IPush (Reg R11);
+             IInstrComment (IPush (Sized (QWORD_PTR, RegOffset (-8, RBP))), "push closure to stack");
+             ICall (RegOffset (8, RAX));
+             IInstrComment (IAdd (Reg RSP, Const 40L), "Popping 5 arguments");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
+         t_asm "compile_native_fun_app"
+           (compile_cexpr
+              (free_vars_C (CApp (ImmId ("print", 1), [ImmNum (3L, 0)], Native, 1)))
+              [] 1 "" )
+           [ IPush (Reg R10);
+             IPush (Reg R12);
+             IPush (Reg R13);
+             IPush (Reg R14);
+             IPush (Reg RBX);
+             IPush (Reg RSI);
+             IPush (Reg RDI);
+             IPush (Reg RCX);
+             IPush (Reg RDX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Sized (QWORD_PTR, Reg RDI), Const 6L);
+             ICall (Label "print");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RDX);
+             IPop (Reg RCX);
+             IPop (Reg RDI);
+             IPop (Reg RSI);
+             IPop (Reg RBX);
+             IPop (Reg R14);
+             IPop (Reg R13);
+             IPop (Reg R12);
+             IPop (Reg R10) ];
+         t_asm "compile_native_fun_app_multi_arg"
+           (compile_cexpr
+              (free_vars_C
+                 (CApp (ImmId ("equal", 1), [ImmNum (3L, 0); ImmNum (3L, 0)], Native, 1)) )
+              [] 1 "" )
+           [ IPush (Reg RDI);
+             IPush (Reg RSI);
+             IPush (Reg RDX);
+             IPush (Reg RCX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Reg RAX, Const 6L);
+             IMov (Reg RSI, Reg RAX);
+             IMov (Reg RAX, Const 6L);
+             IMov (Reg RDI, Reg RAX);
+             ICall (Label "equal");
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RCX);
+             IPop (Reg RDX);
+             IPop (Reg RSI);
+             IPop (Reg RDI) ];
+         t_asm "compile_native_fun_app_eight_arg"
+           (compile_cexpr
+              (free_vars_C
+                 (CApp
+                    ( ImmId ("equal", 1),
+                      [ ImmNum (3L, 0);
+                        ImmNum (4L, 0);
+                        ImmNum (5L, 0);
+                        ImmNum (6L, 0);
+                        ImmNum (7L, 0);
+                        ImmNum (8L, 0);
+                        ImmNum (9L, 0);
+                        ImmNum (10L, 0) ],
+                      Native,
+                      1 ) ) )
+              [] 1 "" )
+           [ IPush (Reg RDI);
+             IPush (Reg RSI);
+             IPush (Reg RDX);
+             IPush (Reg RCX);
+             IPush (Reg R8);
+             IPush (Reg R9);
+             IMov (Reg RAX, Const 20L);
+             IPush (Reg RAX);
+             IMov (Reg RAX, Const 18L);
+             IPush (Reg RAX);
+             IMov (Reg RAX, Const 16L);
+             IMov (Reg R9, Reg RAX);
+             IMov (Reg RAX, Const 14L);
+             IMov (Reg R8, Reg RAX);
+             IMov (Reg RAX, Const 12L);
+             IMov (Reg RCX, Reg RAX);
+             IMov (Reg RAX, Const 10L);
+             IMov (Reg RDX, Reg RAX);
+             IMov (Reg RAX, Const 8L);
+             IMov (Reg RSI, Reg RAX);
+             IMov (Reg RAX, Const 6L);
+             IMov (Reg RDI, Reg RAX);
+             ICall (Label "equal");
+             IAdd (Reg RSP, Const 16L);
+             IPop (Reg R9);
+             IPop (Reg R8);
+             IPop (Reg RCX);
+             IPop (Reg RDX);
+             IPop (Reg RSI);
+             IPop (Reg RDI) ];
+         t_asm "compile_tuple"
+           (compile_cexpr
+              (free_vars_C (CTuple ([ImmNum (3L, 2); ImmBool (false, 1); ImmNil 3], 0)))
+              [] 1 "" )
+           [ IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 3L);
+             IMov (Reg R11, Const 6L);
+             IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11);
+             IMov (Reg R11, HexConst 0x7FFFFFFFFFFFFFFFL);
+             IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Reg R11);
+             IMov (Reg R11, HexConst 0x0000000000000001L);
+             IMov (Sized (QWORD_PTR, RegOffset (24, R15)), Reg R11);
+             IMov (Reg RAX, Reg R15);
+             IOr (Reg RAX, Const 1L);
+             IAdd (Reg R15, Const 32L) ];
+         t_asm "compile_checksize"
+           (compile_cexpr
+              (free_vars_C (CPrim2 (CheckSize, ImmId ("tup_4", 3), ImmNum (2L, 4), 5)))
+              [(1, [("tup_4", RegOffset (-8, RBP))])]
+              1 "" )
+           [ IMov (Reg RAX, RegOffset (-8, RBP));
+             ISub (Reg RAX, Const 1L);
+             IMov (Reg R11, Const 4L);
+             ISar (Reg R11, Const 1L);
+             ICmp (Reg R11, RegOffset (0, RAX));
+             IJne (Label "?err_tuple_destructure_mismatch");
+             IAdd (Reg RAX, Const 1L) ];
+         t_asm "snake_fun_call_tuple"
+           (compile_cexpr
+              (free_vars_C
+                 (CApp (ImmId ("foo", 0), [ImmId ("y_6", 6); ImmId ("y_3", 5)], Snake, 3)) )
+              [ ( 0,
+                  [ ("foo", RegOffset (-8, RBP));
+                    ("y_6", RegOffset (-16, RBP));
+                    ("y_3", RegOffset (-24, RBP)) ] ) ]
+              0 "" )
+           [ ILineComment "checking that (foo) with tag 3 is a closure";
+             IMov (Reg RAX, RegOffset (-8, RBP));
+             IAnd (Reg RAX, HexConst 7L);
+             ICmp (Reg RAX, Const 5L);
+             IMov (Reg RDI, RegOffset (-8, RBP));
+             IJne (Label "?err_call_not_closure");
+             IInstrComment (IMov (Reg RAX, RegOffset (-8, RBP)), "compiled closure: foo");
+             IInstrComment (ISub (Reg RAX, HexConst 5L), "strip off tag");
+             IMov (Reg R11, RegOffset (0, RAX));
+             ICmp (Reg R11, Const 2L);
+             IMov (Reg RDI, Reg R11);
+             IJne (Label "?err_call_arity_err");
+             IMov (Reg R11, RegOffset (-24, RBP));
+             IPush (Reg R11);
+             IMov (Reg R11, RegOffset (-16, RBP));
+             IPush (Reg R11);
+             IInstrComment (IPush (Sized (QWORD_PTR, RegOffset (-8, RBP))), "push closure to stack");
+             ICall (RegOffset (8, RAX));
+             IAdd (Reg RSP, Const 24L) ]
+         (*t_asm "compile_nullary_lam"
+                       (compile_cexpr
+                          (free_vars_C (CLambda ([], ACExpr (CImmExpr (ImmNum (100L, 1))), 2)))
+                          [] 0 "" )
+                       [ ILineComment "skip over the code for the lambda";
+                         IJmp (Label "lam_2_done");
+                         ILabel "lam_2";
+                         ILineComment "prologue";
+                         IPush (Reg RBP);
+                         IMov (Reg RBP, Reg RSP);
+                         ILineComment "unpack the closure";
+                         IInstrComment
+                           ( ISub (Reg RSP, Const 0L),
+                             "reserve space on the stack for closed-over vars and local vars" );
+                         IInstrComment
+                           ( IMov (Reg R11, RegOffset (16, RBP)),
+                             "\\ load the self argument (assumes self is always first argument)" );
+                         IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
+                         ILineComment "actual function body";
+                         IMov (Reg RAX, Const 200L);
+                         ILineComment "epilogue";
+                         IMov (Reg RSP, Reg RBP);
+                         IPop (Reg RBP);
+                         IRet;
+                         ILabel "lam_2_done";
+                         ILineComment "start filling in the closure information";
+                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 0L), "arity");
+                         IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_2"), "\t\\ code pointer");
+                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
+                         IInstrComment
+                           (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of free variables");
+                         ILineComment "start creating the closure value";
+                         IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
+                         IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
+                         IInstrComment
+                           (IAdd (Reg R15, Const 32L), "update heap pointer, keeping 16-byte alignment");
+                         ILineComment "now RAX contains a proper closure value" ];
+                     t_asm "compile_unary_lam"
+                       (compile_cexpr
+                          (free_vars_C (CLambda (["x_4"], ACExpr (CImmExpr (ImmId ("x_4", 2))), 1)))
+                          [(0, [("x_4", RegOffset (24, RBP))])]
+                          0 "" )
+                       [ ILineComment "skip over the code for the lambda";
+                         IJmp (Label "lam_1_done");
+                         ILabel "lam_1";
+                         ILineComment "prologue";
+                         IPush (Reg RBP);
+                         IMov (Reg RBP, Reg RSP);
+                         ILineComment "unpack the closure";
+                         IInstrComment
+                           ( ISub (Reg RSP, Const 0L),
+                             "reserve space on the stack for closed-over vars and local vars" );
+                         IInstrComment
+                           ( IMov (Reg R11, RegOffset (16, RBP)),
+                             "\\ load the self argument (assumes self is always first argument)" );
+                         IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
+                         ILineComment "actual function body";
+                         IMov (Reg RAX, RegOffset (24, RBP));
+                         ILineComment "epilogue";
+                         IMov (Reg RSP, Reg RBP);
+                         IPop (Reg RBP);
+                         IRet;
+                         ILabel "lam_1_done";
+                         ILineComment "start filling in the closure information";
+                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "arity");
+                         IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_1"), "\t\\ code pointer");
+                         IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
+                         IInstrComment
+                           (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 0L), "# of free variables");
+                         ILineComment "start creating the closure value";
+                         IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
+                         IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
+                         IInstrComment
+                           (IAdd (Reg R15, Const 32L), "update heap pointer, keeping 16-byte alignment");
+                         ILineComment "now RAX contains a proper closure value" ];
+           t_asm "compile_lam_with_frees"
+             (compile_cexpr
+                (free_vars_C
+                   (CLambda
+                      ( ["y_8"],
+                        ALet
+                          ( "binop_4",
+                            CPrim2 (Plus, ImmId ("x", 8), ImmId ("y_8", 7), 6),
+                            ACExpr (CPrim2 (Plus, ImmId ("binop_4", 5), ImmId ("z", 4), 3)),
+                            2 ),
+                        1 ) ) )
+                [ ( 0,
+                    [ ("y_8", RegOffset (24, RBP));
+                      ("binop_4", RegOffset (-24, RBP));
+                      ("x", RegOffset (8, RBP));
+                      ("z", RegOffset (16, RBP)) ] ) ]
+                0 "" )
+             [ ILineComment "skip over the code for the lambda";
+               IJmp (Label "lam_1_done");
+               ILabel "lam_1";
+               ILineComment "prologue";
+               IPush (Reg RBP);
+               IMov (Reg RBP, Reg RSP);
+               ILineComment "unpack the closure";
+               IInstrComment
+                 ( ISub (Reg RSP, Const 48L),
+                   "reserve space on the stack for closed-over vars and local vars" );
+               IInstrComment
+                 ( IMov (Reg R11, RegOffset (16, RBP)),
+                   "\\ load the self argument (assumes self is always first argument)" );
+               IInstrComment (ISub (Reg R11, HexConst 5L), "\t/ and untag it");
+               IInstrComment (IMov (Reg RAX, RegOffset (24, R11)), "\\ load z from closure");
+               IInstrComment (IMov (RegOffset (16, RBP), Reg RAX), "/ into its correct stack slot");
+               IInstrComment (IMov (Reg RAX, RegOffset (32, R11)), "\\ load x from closure");
+               IInstrComment (IMov (RegOffset (8, RBP), Reg RAX), "/ into its correct stack slot");
+               ILineComment "actual function body";
+               IMov (Reg RAX, RegOffset (8, RBP));
+               IAnd (Reg RAX, HexConst 1L);
+               ICmp (Reg RAX, Const 0L);
+               IMov (Reg RDI, RegOffset (8, RBP));
+               IJne (Label "?err_arith_not_num");
+               IMov (Reg RAX, RegOffset (24, RBP));
+               IAnd (Reg RAX, HexConst 1L);
+               ICmp (Reg RAX, Const 0L);
+               IMov (Reg RDI, RegOffset (24, RBP));
+               IJne (Label "?err_arith_not_num");
+               IMov (Reg RAX, RegOffset (8, RBP));
+               IMov (Reg R11, RegOffset (24, RBP));
+               IAdd (Reg RAX, Reg R11);
+               IJo (Label "?err_overflow");
+               IInstrComment (IMov (RegOffset (-24, RBP), Reg RAX), "binding binop_4 at tag 2");
+               IMov (Reg RAX, RegOffset (-24, RBP));
+               IAnd (Reg RAX, HexConst 1L);
+               ICmp (Reg RAX, Const 0L);
+               IMov (Reg RDI, RegOffset (-24, RBP));
+               IJne (Label "?err_arith_not_num");
+               IMov (Reg RAX, RegOffset (16, RBP));
+               IAnd (Reg RAX, HexConst 1L);
+               ICmp (Reg RAX, Const 0L);
+               IMov (Reg RDI, RegOffset (16, RBP));
+               IJne (Label "?err_arith_not_num");
+               IMov (Reg RAX, RegOffset (-24, RBP));
+               IMov (Reg R11, RegOffset (16, RBP));
+               IAdd (Reg RAX, Reg R11);
+               IJo (Label "?err_overflow");
+               ILineComment "epilogue";
+               IMov (Reg RSP, Reg RBP);
+               IPop (Reg RBP);
+               IRet;
+               ILabel "lam_1_done";
+               ILineComment "start filling in the closure information";
+               IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (0, R15)), Const 1L), "arity");
+               IInstrComment (IMov (Sized (QWORD_PTR, Reg R11), Label "lam_1"), "\t\\ code pointer");
+               IInstrComment (IMov (Sized (QWORD_PTR, RegOffset (8, R15)), Reg R11), "/");
+               IInstrComment
+                 (IMov (Sized (QWORD_PTR, RegOffset (16, R15)), Const 2L), "# of free variables");
+               IInstrComment (IMov (Reg RAX, RegOffset (16, RBP)), "copy z from argument");
+               IInstrComment (IMov (RegOffset (24, R15), Reg RAX), "into closure");
+               IInstrComment (IMov (Reg RAX, RegOffset (8, RBP)), "copy x from argument");
+               IInstrComment (IMov (RegOffset (32, R15), Reg RAX), "into closure");
+               ILineComment "start creating the closure value";
+               IInstrComment (IMov (Reg RAX, Reg R15), "\\ create the closure");
+               IInstrComment (IAdd (Reg RAX, HexConst 5L), "/");
+               IInstrComment
+                 (IAdd (Reg R15, Const 48L), "update heap pointer, keeping 16-byte alignment");
+               ILineComment "now RAX contains a proper closure value" ] *) ]
+;;
+
+let simple_if = "if true: 5 + 3 else: 6 * 6"
+
+let simple_prim1 = "sub1(80)"
+
+let simple_prim2 = "90 - 30"
+
+let complex_prim2 = "(90 - 30) * 80 + 34 - (30 * -1)"
+
+let id_error = "x"
+
+let let_error = "let x = 4 in y"
+
+let invalid_prog = "3 let y = 4 in 90"
+
+let forty = "let x = 40 in x"
+
+let fals = "let x = false in x"
+
+let tru = "let x = true in x"
+
+let math_tests =
+  [ t "forty_one" "41" "" "41";
+    t "simple_if" simple_if "" "8";
+    t "simple_prim1" simple_prim1 "" "79";
+    t "simple_minus_negative" "93 - 98" "" "-5";
+    t "simple_plus_negative" "-8 + 3" "" "-5";
+    t "negate_a_negative" "3 - -10" "" "13";
+    t "simple_times" "3 * 4" "" "12";
+    t "simple_prim2" simple_prim2 "" "60";
+    t "complex_prim2" complex_prim2 "" "4864";
+    t "add_nests" "(1 + 2) + (3 + 4)" "" "10";
+    t "sub_nests" "(6 - 5) - (4 - 2)" "" "-1";
+    t "zero_subtraction" "(1 - 2) - (3 - 4)" "" "0";
+    t "mixed_ops1" "(6 - 4) + (3 - 5)" "" "0";
+    t "mixed_ops2" "(2 - 5) + (4 * 5)" "" "17";
+    t "nest_mixed_ops" "(1 + (2 + 3)) * ((4 - 5) - (0 * 6))" "" "-6";
+    t "add1_even" "add1(6)" "" "7";
+    t "add1_odd" "add1(5)" "" "6";
+    t "add1_neg" "add1(-4)" "" "-3";
+    t "sub1_even" "sub1(6)" "" "5";
+    t "sub1_odd" "sub1(5)" "" "4";
+    t "sub1_neg" "sub1(-4)" "" "-5" ]
+;;
+
+let logic_tests =
+  [ t "true" "true" "" "true";
+    t "false" "false" "" "false";
+    t "not_true" "!(true)" "" "false";
+    t "not_false" "!(false)" "" "true";
+    t "not_mixture" "!(!(!(!(!(false)))))" "" "true";
+    t "t_and_t" "true && true" "" "true";
+    t "t_and_f" "true && false" "" "false";
+    t "f_and_t" "false && true" "" "false";
+    t "f_and_f" "false && false" "" "false";
+    t "and_short1" "false && print(4)" "" "false";
+    t "and_short2" "false && 4" "" "false";
+    t "t_or_t" "true || true" "" "true";
+    t "t_or_f" "true || false" "" "true";
+    t "f_or_t" "false || true" "" "true";
+    t "f_or_f" "false || false" "" "false";
+    t "or_short1" "true || print(4)" "" "true";
+    t "or_short2" "true || 34343" "" "true";
+    t "not_and_or" "!(4 > 5) && (false || (3 >= 2))" "" "true";
+    t "logic_with_is" "isnum(3) && (isbool(false) && true) && !(5 > 3)" "" "false";
+    t "logic_with_print" "print(false) || print(true)" "" "false\ntrue\ntrue";
+    t "logic_with_print_short" "print(true) || print(false)" "" "true\ntrue" ]
+;;
+
+let print_tests =
+  [ t "print_num" "print(4)" "" "4\n4";
+    t "print_bool" "print(false)" "" "false\nfalse";
+    t "print_binop1" "print(45 + 3 - 2)" "" "46\n46";
+    t "print_binop2" "print(print(45) + print(3) - 2)" "" "45\n3\n46\n46";
+    t "print_wrapped1" "isnum(print(45 + 3 - 2))" "" "46\ntrue";
+    t "print_wrapped2" "isbool(print(true))" "" "true\ntrue";
+    t "print_let_bind" "let q = print(4) in (q + 1)" "" "4\n5";
+    t "print_let_body" "let q = 5 in print(q)" "" "5\n5";
+    t "print_nested_let1" "let x = print(let x = print(2), y = print(false) in (x == y)) in x" ""
+      "2\nfalse\nfalse\nfalse";
+    t "print_nested_let2" "let x = print(let x = print(0) + 5 in x) in print(x + 10) + 5" ""
+      "0\n5\n15\n20";
+    t "print_nested_let3" "let a = 4 in let b = print(a * 5) in print(b - 9)" "" "20\n11\n11" ]
+;;
+
+let comparison_tests =
+  [ (* --------------- Basic Cases --------------- *)
+    t "five_g_three" "5 > 3" "" "true";
+    t "zero_g_twelve" "0 > 12" "" "false";
+    t "negative_g1" "-10 > -9" "" "false";
+    t "negative_g2" "-10 > -11" "" "true";
+    t "n_g_n" "90 > 90" "" "false";
+    t "five_ge_three" "5 >= 3" "" "true";
+    t "zero_ge_twelve" "0 >= 12" "" "false";
+    t "negative_ge1" "-10 >= -9" "" "false";
+    t "negative_ge2" "-10 >= -11" "" "true";
+    t "n_ge_n" "90 >= 90" "" "true";
+    t "five_l_three" "5 < 3" "" "false";
+    t "zero_l_twelve" "0 < 12" "" "true";
+    t "negative_l1" "-10 < -9" "" "true";
+    t "negative_l2" "-10 < -11" "" "false";
+    t "n_l_n" "90 < 90" "" "false";
+    t "five_le_three" "5 <= 3" "" "false";
+    t "zero_le_twelve" "0 <= 12" "" "true";
+    t "negative_le1" "-10 <= -9" "" "true";
+    t "negative_le2" "-10 <= -11" "" "false";
+    t "n_le_n" "90 <= 90" "" "true";
+    t "eq_num_true" "3 == 3" "" "true";
+    t "eq_num_false" "33 == 3" "" "false";
+    t "eq_zero" "0 == 0" "" "true";
+    t "eq_bool_1" "true == true" "" "true";
+    t "eq_bool_2" "false == false" "" "true";
+    t "eq_bool_3" "true == false" "" "false";
+    t "eq_bool_4" "false == true" "" "false";
+    t "eq_mixed_1" "34 == true" "" "false";
+    t "eq_mixed_2" "false == 45" "" "false";
+    (* --------------- Complex Cases --------------- *)
+    t "ge_binop_false" "(5 + 10) >= (6 * 3)" "" "false";
+    t "ge_binop_true" "(5 * 3) >= (6 * 2)" "" "true";
+    t "g_binop_false" "(8 + 0) > (4 * 2)" "" "false";
+    t "g_binop_true" "(6 * 30) > (60 * 2)" "" "true";
+    t "l_binop_false" "(2 + 2) < (1 * 0)" "" "false";
+    t "l_binop_true" "(2 - 1) < (1 + 2)" "" "true";
+    t "le_binop_false" "(55 * 2) <= (8 + 4 - 5)" "" "false";
+    t "le_binop_true" "(45 - 3) <= (300 * 4)" "" "true";
+    t "complex_comp" "(23 >= 23) && ((1 + 4) < 8) || false || !(45 <= 5)" "" "true" ]
+;;
+
+let ifs_and_lets_tests =
+  [ t "if_true" "if true: 4 else: 28" "" "4";
+    t "if_false" "if false: 4 else: 28" "" "28";
+    t "if_with_let_conditional" "if (let x = true in x): 4 else: 180" "" "4";
+    t "if_with_let_then" "if true: (let x = 22 in x) else: 2" "" "22";
+    t "if_with_let_else" "if false: 22 else: (let x = 2 in x)" "" "2";
+    t "binop_with_ifs" "(if false: 23 else: 34) + (if true: 10 else: 21)" "" "44";
+    t "ifs_and_lets"
+      "(let x = (if true: 5 + 5 else: 6 * 2) in (let y = (if true: x * 3 else: x + 5) in y))" ""
+      "30";
+    t "nesting_ifs" "if false: (if false: 1 else: 2) else: 3" "" "3";
+    t "if_with_isnum_cond1" "if isnum(5): 50 else: 3" "" "50";
+    t "if_with_isnum_cond2" "if isnum(false): 50 else: 3" "" "3";
+    t "if_with_isbool_cond1" "if isbool(true): 50 else: 3" "" "50";
+    t "if_with_isbool_cond2" "if isbool(4): 50 else: 3" "" "3";
+    t "if_with_isnum_cond_short" "if isnum(false && 300): 5 else: 54" "" "54";
+    t "if_with_isbool_cond_short" "if isbool(false && 12): 5 else: true" "" "5";
+    t "if_ge_cond_false" "if (3 >= 5): 2 else: 3" "" "3";
+    t "if_l_cond_true" "if (2 < 5): 2 else: 3" "" "2";
+    t "if_g_branch_else" "if true: (3 > 4) else: (1 == 1)" "" "false";
+    t "if_e_branch_then" "if false: (3 > 4) else: (1 == 1)" "" "true";
+    t "if_short_circuit" "if (true || 3435): (false && 59) else: true" "" "false";
+    t "if_print_then" "if print(true): print(12) + 45 else: print(5)" "" "true\n12\n57";
+    t "if_print_else" "if print(false): print(12) else: print(4) * 2" "" "false\n4\n8";
+    t "let_x_in_x" "let x = 90 in x" "" "90";
+    t "let_x_in_x_plus_num" "let x = 33 in x + 44" "" "77";
+    t "let_x_in_x_plus_x" "let x = 20 in x + x" "" "40";
+    t "let_two_binds_plus" "let a = 12, b = 4 in a * b" "" "48";
+    t "let_add1_body" "let x = 51 in add1(x)" "" "52";
+    t "let_add1_bind" "let x = add1(51) in x" "" "52";
+    t "let_sub1_body" "let x = 51 in sub1(x)" "" "50";
+    t "let_sub1_bind" "let x = sub1(51) in x" "" "50";
+    t "nesting_lets_add" "let q = 7, r = 8 in let s = 4 in q + r + s" "" "19";
+    t "nesting_lets_minus" "let q = 9, r = 8 in let s = 7 in q - r - s" "" "-6";
+    t "nestings_lets_times" "let q = 4, r = 4 in let s = 4 in q * r * s" "" "64";
+    t "lets_with_let_binds" "let x = (let y = 6 + 2 in y) in x * 8" "" "64";
+    t "shadowing_let_binds" "let x = (let x = 41 in x) in x" "" "41";
+    t "let_with_operation_binds" "let thirty = 30 in let twenty = 20, res = (thirty + 5) in res" ""
+      "35";
+    t "let_binds_letrec_behavior1" "let x = 88, y = x in y" "" "88";
+    t "let_binds_letrec_behavior2" "let x = 88, y = add1(x) in y" "" "89";
+    t "let_binds_letrec_behavior3" "let x = 88, y = (x + 12) in y" "" "100";
+    t "let_plus_let" "(let x = 1 in x) + (let x = 2 in x)" "" "3";
+    t "let_not_eq_num" "(let b = 4 in b) == (let b = 55 in b)" "" "false";
+    t "let_not_eq_bool" "(let a = false in a) == (let a = true in a)" "" "false";
+    t "let_eq_num" "(let b = 4 in b) == (let b = 4 in b)" "" "true";
+    t "let_eq_bool" "(let a = false in a) == (let a = false in a)" "" "true";
+    t "let_different_binds_eq_num" "(let b = 4 in b) == (let c = 4 in c)" "" "true";
+    t "let_different_binds_eq_bool" "(let b = true in b) == (let c = true in c)" "" "true";
+    t "let_compare_false" "let x = 213, y = 44 in x < y" "" "false";
+    t "let_compare_true" "let x = add1(239 + 4), y = 244 in x >= y" "" "true";
+    t "let_isnum_bind" "let x = isnum(4) in if x: 4 else: false" "" "4";
+    t "let_isbool_bind" "let x = isbool(4) in if x: 4 else: false" "" "false";
+    t "let_comparison_in_binds"
+      "let a = (22 == false), b = (34 + 2), c = true, d = (40 == 20) in a || d || c" "" "true";
+    t "let_nesting_comparison"
+      "let x = (99 >= 4) in let y = (x || (6 == 2)) in (isnum(x) || isbool(y) && y)" "" "true" ]
+;;
+
+let is_tests =
+  [ t "isnum_num" "isnum(4)" "" "true";
+    t "isnum_bool" "isnum(false)" "" "false";
+    t "isbool_num" "isbool(-39)" "" "false";
+    t "isbool_bool" "isbool(false)" "" "true" ]
+;;
+
+let general_error_tests =
+  [ te "id_error" id_error "The identifier x, used at <id_error, 1:0-1:1>, is not in scope";
+    te "let_error" let_error "The identifier y, used at <let_error, 1:13-1:14>, is not in scope";
+    te "invalid_prog" invalid_prog "Parse error at line 1, col 5: token `let`" ]
+;;
+
+let misc_tests =
+  [ t "forty" forty "" "40";
+    t "fals" fals "" "false";
+    t "tru" tru "" "true";
+    t "if2" "if false: 4 else: 2" "" "2";
+    t "if1" "if true: 4 else: 2" "" "4";
+    t "let_if" "let y = -1, x = 2 + y in if false: sub1(x) else: y - 3" "" "-4";
+    t "starter_file"
+      "let x =\n\
+      \        if true:\n\
+      \          (if true: add1(2) else: add1(3))\n\
+      \        else:\n\
+      \          (if false: sub1(4) else: sub1(5))\n\
+      \      in x" "" "3" ]
+;;
+
+let type_error_tests =
+  [ te "if_not_bool" "if 4: 2 else: 4" "if expected a boolean";
+    te "not_not_bool" "!(3)" "logic expected a boolean";
+    te "or_not_bool_right" "false || 4" "logic expected a boolean";
+    te "or_not_bool_left" "5 || true" "logic expected a boolean";
+    te "and_not_bool_right" "true && 4" "logic expected a boolean";
+    te "and_not_bool_left" "5 && true" "logic expected a boolean";
+    te "add1_not_num" "add1(true)" "arithmetic expected a number";
+    te "sub1_not_num" "sub1(false)" "arithmetic expected a number";
+    te "plus_not_num_right" "4 + true" "arithmetic expected a number";
+    te "plus_not_num_left" "false + 3" "arithmetic expected a number";
+    te "minus_not_num_right" "23 - true" "arithmetic expected a number";
+    te "minus_not_num_left" "false - 33" "arithmetic expected a number";
+    te "times_not_num_right" "562 * true" "arithmetic expected a number";
+    te "times_not_num_left" "false * 332" "arithmetic expected a number";
+    te "le_not_num_left" "false <= 3" "comparison expected a number";
+    te "le_not_num_right" "4 <= true" "comparison expected a number";
+    te "l_not_num_left" "false < 3" "comparison expected a number";
+    te "l_not_num_right" "4 < true" "comparison expected a number";
+    te "ge_not_num_left" "false >= 3" "comparison expected a number";
+    te "ge_not_num_right" "4 >= true" "comparison expected a number";
+    te "g_not_num_left" "false > 3" "comparison expected a number";
+    te "g_not_num_right" "4 > true" "comparison expected a number";
+    te "get_not_num" "(1, 2, 3)[(1,)]" "get index is not a number";
+    te "set_not_num" "(1, 2, 3)[(2,)] := 6" "set index is not a number";
+    te "get_not_tup" "5[0]" "get expected tuple";
+    te "set_not_tup" "5[0] := 2" "set expected tuple";
+    te "get_low_idx" "(1, 2, 3)[-3]" "index too small to get";
+    te "set_low_idx" "(1, 2, 3)[-3] := 4" "index too small to set";
+    te "get_high_idx" "(1, 2, 3)[5]" "index too large to get";
+    te "set_high_idx" "(1, 2, 3)[5] := false" "index too large to set";
+    te "nil_deref" "nil[4]" "access component of nil" ]
+;;
+
+let overflow_error_tests =
+  [ te "add1_overflow" "add1(4611686018427387903)" "overflow";
+    te "sub1_overflow" "sub1(-4611686018427387904)" "overflow";
+    te "plus_overflow" "4611686018427387900 + 48" "overflow";
+    te "plus_overflow2" "48 + 4611686018427387900" "overflow";
+    te "minus_overflow" "-4611686018427387900 - 100" "overflow";
+    te "minus_overflow2" "-100 - 4611686018427387900" "overflow";
+    te "times_overflow" "4611686018427387900 * 2" "overflow";
+    te "times_overflow2" "2 * 4611686018427387900" "overflow";
+    te "number_overflow" "4611686018427387909" "not supported in this language" ]
+;;
+
+let test_prog =
+  "let x = if sub1(55) < 54: (if 1 > 0: add1(2) else: add1(3)) else: (if 0 == 0: sub1(4) else: \
+   sub1(5)) in x"
+;;
+
+let input_tests =
+  [ t "input1" "let x = input() in x + 2" "123" "125";
+    t "input_echo_false" "input()" "false" "false";
+    t "input_echo_3" "input()" "3" "3";
+    t "input_echo_-72" "input()" "-72" "-72";
+    t "input_multiple_inputs" "(input() + 1, !(input()), 3 * input())" "3\ntrue\n-16"
+      "(4, false, -48)";
+    t "input_nested_input" "def id(x): x\nid(let x = 12 in (2, input()))" "8" "(2, 8)";
+    t "input_input_used_twice" "let x = input() in (x + 1, x + 2)" "3" "(4, 5)";
+    t "input_almost_overflow" "input() - 4611686018427387903" "4611686018427387903" "0";
+    terr "input_overflow_positive" "input()" "4611686018427387904"
+      "overflow, got -4611686018427387904";
+    terr "input_overflow_negative" "input()" "-4611686018427387905"
+      "overflow, got 4611686018427387903";
+    terr "input_tuple" "input()" "(1, 2)"
+      "Error 1: Illegal input (only a single number or bool expected)";
+    terr "input_string" "input()" "nil"
+      "Error 1: Illegal input (only a single number or bool expected)";
+    t "input_almost_num1" "input()" "1234S" "1234";
+    terr "input_almost_num2" "input()" "S1234"
+      "Error 1: Illegal input (only a single number or bool expected)" ]
+;;
+
+let integration_test_suite =
+  "integration_test_suite"
+  >::: general_error_tests @ overflow_error_tests @ type_error_tests @ misc_tests @ math_tests
+       @ logic_tests @ ifs_and_lets_tests @ comparison_tests @ is_tests @ print_tests @ pair_tests
+       @ input_tests
+;;
+
 let () =
   run_test_tt_main
     ( "all_tests"
@@ -899,6 +1838,9 @@ let () =
            interfere_suite;
            reg_alloc_suite;
            naive_alloc_suite;
+           compile_aexpr_suite;
+           (* compile_cexpr_suite; *)
+           integration_test_suite;
            (* gc_suite; *)
            color_graph_suite (* input_file_test_suite () *) ] )
 ;;
