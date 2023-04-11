@@ -1803,7 +1803,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       in
       let main =
         prologue @ push_callees @ heap_start @ set_stack_bottom @ clear_registers @ comp_main
-        @ pop_callee_saved_registers @ epilogue
+        @ pop_callees @ epilogue
       in
       sprintf "%s%s%s\n" prelude (to_asm main) suffix
 ;;
