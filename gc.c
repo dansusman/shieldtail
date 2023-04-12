@@ -87,11 +87,11 @@ uint64_t *copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
   uint64_t closure = *closure_addr;
   uint64_t *closure_ptr = (uint64_t *)(closure - CLOSURE_TAG);
 
-  if (valIsForwarding(*closure_ptr))
+  if ((*closure_ptr & FORWARDING_TAG_MASK) == FORWARDING_TAG)
   {
     uint64_t *forward_ptr = (uint64_t *)(*closure_ptr - FORWARDING_TAG);
     DEBUG_PRINT("Found forwarding pointer %018llx\n", (uint64_t)forward_ptr);
-    uint64_t retagged_ptr = (uint64_t)forward_ptr + TUPLE_TAG;
+    uint64_t retagged_ptr = (uint64_t)forward_ptr + CLOSURE_TAG;
     *closure_addr = retagged_ptr;
     return heap_top;
   }
@@ -102,9 +102,6 @@ uint64_t *copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
 
   for (int i = 0; i < padded_closure_length; i++)
   {
-    DEBUG_PRINT("Copying value at closure[%d] ", i);
-    printHelp(OUT, closure_ptr[i]);
-    DEBUG_PRINT(" from %p to %p\n", closure_ptr + i, heap_top + i);
     heap_top[i] = closure_ptr[i];
   }
 
@@ -114,13 +111,14 @@ uint64_t *copyClosure(uint64_t *closure_addr, uint64_t *heap_top)
   *closure_ptr = f_ptr;
   DEBUG_PRINT("making forwarding pointer at %p\n", *closure_ptr);
 
-  uint64_t *new_heap_top = heap_top + padded_closure_length;
+  heap_top += padded_closure_length;
+
   for (int i = 3; i < closure_length; i++)
   {
-    new_heap_top = copy_if_needed(&closure_ptr[i], new_heap_top);
+    heap_top = copy_if_needed(&closure_addr[i], heap_top);
   }
 
-  return new_heap_top;
+  return heap_top;
 }
 
 uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
@@ -129,7 +127,7 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
   uint64_t tuple = *tuple_addr;
   uint64_t *tuple_ptr = (uint64_t *)(tuple - TUPLE_TAG);
 
-  if (valIsForwarding(*tuple_ptr))
+  if ((*tuple_ptr & FORWARDING_TAG_MASK) == FORWARDING_TAG)
   {
     uint64_t *forward_ptr = (uint64_t *)(*tuple_ptr - FORWARDING_TAG);
     DEBUG_PRINT("Found forwarding pointer %018llx\n", (uint64_t)forward_ptr);
@@ -144,9 +142,6 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
 
   for (int i = 0; i < padded_tuple_length; i++)
   {
-    DEBUG_PRINT("Copying value at tuple[%d] (raw, not index) ", i);
-    printHelp(OUT, tuple_ptr[i]);
-    DEBUG_PRINT(" from %p to %p\n", tuple_ptr + i, heap_top + i);
     heap_top[i] = tuple_ptr[i];
   }
 
@@ -156,13 +151,14 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
   *tuple_ptr = f_ptr;
   DEBUG_PRINT("making forwarding pointer at %p\n", tuple_ptr);
 
-  uint64_t *new_heap_top = heap_top + padded_tuple_length;
+  heap_top += padded_tuple_length;
+
   for (int i = 1; i < tuple_length; i++)
   {
-    new_heap_top = copy_if_needed(&tuple_ptr[i], new_heap_top);
+    heap_top = copy_if_needed(&tuple_addr[i], heap_top);
   }
 
-  return new_heap_top;
+  return heap_top;
 }
 
 /*
@@ -185,12 +181,16 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
 uint64_t *copy_if_needed(uint64_t *garter_val_addr, uint64_t *heap_top)
 {
   uint64_t garter_val = *garter_val_addr;
+  if (garter_val == NIL)
+  {
+    return heap_top;
+  }
   if (valIsClosure(garter_val))
   {
     uint64_t *new_heap_top = copyClosure(garter_val_addr, heap_top);
     if (new_heap_top != heap_top)
     {
-      uint64_t closure_ptr = ((uint64_t)heap_top) + TUPLE_TAG;
+      uint64_t closure_ptr = ((uint64_t)heap_top) + CLOSURE_TAG;
       *garter_val_addr = closure_ptr;
     }
     return new_heap_top;
@@ -242,7 +242,7 @@ uint64_t *gc(uint64_t *bottom_frame, uint64_t *top_frame, uint64_t *top_stack, u
     DEBUG_PRINT("starting GC on new stack frame\n");
     DEBUG_PRINT("Top stack: %p, top frame: %p\n", top_stack, top_frame);
 
-    for (uint64_t *cur_word = top_stack + 1; cur_word < top_frame; cur_word++)
+    for (uint64_t *cur_word = top_stack; cur_word < top_frame; cur_word++)
     {
       DEBUG_PRINT("copying value at %p: ", cur_word);
 #ifdef DEBUG
