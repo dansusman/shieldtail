@@ -868,7 +868,7 @@ let gc =
     tgc "gc_lam1" (4 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f(1)" "" "1";
     tgc "gc_lam2" (8 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f((1, 2))" ""
       "(1, 2)";
-    tgc "gc_call_lams" (8 + builtins_size) "let f = (lambda: (1, 2)) in f(); f(); f(); f(); f()" ""
+    tgc "gc_call_lams" (8 + builtins_size) ~alloc:Naive "let f = (lambda: (1, 2)) in f(); f(); f(); f(); f()" ""
       "(1, 2)";
     tgc "gc_call_identity" (4 + builtins_size)
       "let f = (lambda(x): x) in f(1); f(2); f(3); f(4); f(5)" "" "5";
