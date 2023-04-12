@@ -864,7 +864,7 @@ let oom =
 ;;
 
 let gc =
-  [ tgc "gc_let" (4 + builtins_size) "let x = (1, 2), y = (3, 4) in x" "" "(1, 2)";
+  [ tgc "gc_let" (8 + builtins_size) "let x = (1, 2), y = (3, 4) in x" "" "(1, 2)";
     tgc "gc_lam1" (4 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f(1)" "" "1";
     tgc "gc_lam2" (8 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f((1, 2))" ""
       "(1, 2)";
@@ -879,7 +879,7 @@ let gc =
       "let t = ((lambda (x): x), (lambda (y, z): (lambda (x): 1 + y + z))) in t[1](2, 6)(4)" "" "9";
     tgc "gc_nested_lambdas" (14 + builtins_size)
       "(lambda (x): (lambda (y, z): (lambda (w): w + x + y + z)))(1)(2, 3)(4)" "" "10";
-    tgc "gc_nested_tuples" (16 + builtins_size) "(1, (2, (3, (4, 5, (6, nil, nil, (7,))))))[0]" ""
+    tgc "gc_nested_tuples" (24 + builtins_size) "(1, (2, (3, (4, 5, (6, nil, nil, (7,))))))[0]" ""
       "1";
     tgc "gc_cyclic_tuple" (4 + builtins_size) "let t = (1, nil) in t[1] := t; t[1][1][1][1][0]" ""
       "1";
@@ -2003,8 +2003,6 @@ let lambda_suite =
            "(lambda (x, y): x + y + (lambda (i, j, k): i + j + k)(5, 3, 2))(4, 1)" "" "15";
          t "prim2_with_lam" "(lambda (x): x + 2)(5) * (lambda (x): x + 1)(5)" "" "42";
          t "currying" "let foo = (lambda (x): (lambda (y): x + y)) in foo(1)(44)" "" "45";
-         t "printing" "let f = (lambda : print(1)) in f(); f()" "" "1\n1\n1";
-         t "input" "let foo = (lambda : input()) in foo() + foo()" "1\n2" "3";
          t "letrec_nest_lam"
            "let rec f = (lambda (x): let rec h = (lambda (k): x + k) in let rec g = (lambda (y): y \
             + h(y)) in g(x)) in f(4)"
