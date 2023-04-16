@@ -85,6 +85,7 @@ and 'a cexpr =
   | CGetItem of 'a immexpr * 'a immexpr * 'a
   | CSetItem of 'a immexpr * 'a immexpr * 'a immexpr * 'a
   | CLambda of string list * 'a aexpr * 'a
+  | CString of string * 'a
 
 and 'a aexpr =
   (* anf expressions *)
@@ -308,6 +309,7 @@ let atag (p : 'a aprogram) : tag aprogram =
         let app_tag = tag () in
         CApp (helpI func, List.map helpI args, native, app_tag)
     | CImmExpr i -> CImmExpr (helpI i)
+    | CString (str, _) -> CString (str, tag ())
     | CTuple (es, _) ->
         let tup_tag = tag () in
         CTuple (List.map helpI es, tup_tag)
@@ -360,6 +362,7 @@ let rec fvs_to_list (prog : (StringSet.t * tag) aprogram) : (string list * tag) 
     | CSetItem (t, i, e, (fvs, tag)) ->
         CSetItem (helpI t, helpI i, helpI e, (StringSet.elements fvs, tag))
     | CLambda (args, body, (fvs, tag)) -> CLambda (args, helpA body, (StringSet.elements fvs, tag))
+    | CString (v, (fvs, tag)) -> CString (v, (StringSet.elements fvs, tag))
     | CImmExpr x -> CImmExpr (helpI x)
   and helpI (i : (StringSet.t * tag) immexpr) : (string list * tag) immexpr =
     match i with

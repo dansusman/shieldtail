@@ -146,38 +146,37 @@ void printHelp(FILE *out, SNAKEVAL val)
       fprintf(out, "<cyclic tuple %d>", (int)(*addr & 0x7FFFFFFFFFFFFFFF));
       return;
     }
-    /* if (!(addr >= FROM_S && addr < FROM_E) && !(addr >= TO_S && addr < TO_E)) { */
-    /*   fprintf(out, "DANGLING POINTER %p", addr); */
-    /*   return; */
-    /* } */
-    // Mark this tuple: save its length locally, then mark it
     uint64_t len = addr[0];
     if (len & 0x1)
-    { // actually, it's a forwarding pointer
-      fprintf(out, "forwarding to %p", (uint64_t *)(len - 1));
+    {
+      len /= 2; // length is encoded
+      fprintf(out, "\"");
+      for (uint64_t i = 1; i <= len; i++)
+      {
+        fprintf(out, "%c", (char)(addr[i]));
+      }
+      fprintf(out, "\"");
+      // Unmark this tuple: restore its length
+      // *(addr) = len * 2; // length is encoded
       return;
     }
     else
     {
       len /= 2; // length is encoded
-    }
-    /* fprintf(out, "Heap is:\n"); */
-    /* naive_print_heap(HEAP, HEAP_END); */
-    /* fprintf(out, "%p-->(len=%d)", (int*)(val - 1), len / 2); */
-    /* fflush(out); */
-    *(addr) = 0x8000000000000000 | (++tupleCounter);
-    fprintf(out, "(");
-    for (uint64_t i = 1; i <= len; i++)
-    {
-      if (i > 1)
+      *(addr) = 0x8000000000000000 | (++tupleCounter);
+      fprintf(out, "(");
+      for (uint64_t i = 1; i <= len; i++)
+      {
+        if (i > 1)
+          fprintf(out, ", ");
+        printHelp(out, addr[i]);
+      }
+      if (len == 1)
         fprintf(out, ", ");
-      printHelp(out, addr[i]);
+      fprintf(out, ")");
+      // Unmark this tuple: restore its length
+      *(addr) = len * 2; // length is encoded
     }
-    if (len == 1)
-      fprintf(out, ", ");
-    fprintf(out, ")");
-    // Unmark this tuple: restore its length
-    *(addr) = len * 2; // length is encoded
   }
   else
   {

@@ -90,7 +90,7 @@ rule token = parse
   | "end" { END }
   | "rec" { REC }
   | "shadow" { SHADOW }
-  | string as s { STRING s }
+  | string as s { STRING (String.sub s 1 (String.length s - 2))}
   | ident as x { if x = "_" then UNDERSCORE else ID x }
   | eof { EOF }
   | _ as c { failwith (sprintf "Unrecognized character: %c" c) }

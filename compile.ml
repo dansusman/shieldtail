@@ -211,7 +211,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
   let rec wf_E e (env : scope_info name_envt) =
     debug_printf "In wf_E: %s\n" (ExtString.String.join ", " (env_keys env));
     match e with
-    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
+    | EString _ -> []
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
     | EGetItem (e, idx, _) -> wf_E e env @ wf_E idx env
@@ -517,7 +517,7 @@ let desugar (p : sourcespan program) : sourcespan program =
     size_check_bind :: List.flatten (List.mapi tupleBind binds)
   and helpE e =
     match e with
-    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
+    | EString (str, tag) -> EString (str, tag)
     | ESeq (e1, e2, tag) -> ELet ([(BBlank tag, helpE e1, tag)], helpE e2, tag)
     | ETuple (exprs, tag) -> ETuple (List.map helpE exprs, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE e, helpE idx, tag)
@@ -588,6 +588,7 @@ let rec deepest_stack e env =
     | CLambda (args, body, _) ->
         let new_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args @ env in
         deepest_stack body new_env
+    | CString _ -> 0
     | CImmExpr i -> helpI i
   and helpI i =
     match i with
@@ -642,7 +643,6 @@ let rename_and_tag (p : tag program) : tag program =
         ((b', e', a) :: bindings', env'')
   and helpE env e =
     match e with
-    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ESeq (e1, e2, tag) -> ESeq (helpE env e1, helpE env e2, tag)
     | ETuple (es, tag) -> ETuple (List.map (helpE env) es, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE env e, helpE env idx, tag)
@@ -650,6 +650,7 @@ let rename_and_tag (p : tag program) : tag program =
     | EPrim1 (op, arg, tag) -> EPrim1 (op, helpE env arg, tag)
     | EPrim2 (op, left, right, tag) -> EPrim2 (op, helpE env left, helpE env right, tag)
     | EIf (c, t, f, tag) -> EIf (helpE env c, helpE env t, helpE env f, tag)
+    | EString _ -> e
     | ENumber _ -> e
     | EBool _ -> e
     | ENil _ -> e
@@ -773,7 +774,6 @@ let anf (p : tag program) : unit aprogram =
         (CImmExpr imm, setup)
   and helpI (e : tag expr) : unit immexpr * unit anf_bind list =
     match e with
-    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ENumber (n, _) -> (ImmNum (n, ()), [])
     | EBool (b, _) -> (ImmBool (b, ()), [])
     | EId (name, _) -> (ImmId (name, ()), [])
@@ -786,6 +786,9 @@ let anf (p : tag program) : unit aprogram =
         let tmp = sprintf "tup_%d" tag in
         let new_args, new_setup = List.split (List.map helpI args) in
         (ImmId (tmp, ()), List.concat new_setup @ [BLet (tmp, CTuple (new_args, ()))])
+    | EString (str, tag) ->
+        let tmp = sprintf "str_%d" tag in
+        (ImmId (tmp, ()), [BLet (tmp, CString (str, ()))])
     | EGetItem (tup, idx, tag) ->
         let tmp = sprintf "get_%d" tag in
         let tup_imm, tup_setup = helpI tup in
@@ -909,6 +912,7 @@ let free_vars (e : 'a aexpr) : StringSet.t =
         let new_val_free = free_vars_I new_val bound in
         StringSet.union (StringSet.union tup_free idx_free) new_val_free
     | CLambda (args, body, _) -> free_vars_A body (StringSet.union (StringSet.of_list args) bound)
+    | CString (_, _) -> StringSet.empty
     | CImmExpr i -> free_vars_I i bound
   and free_vars_I (e : 'a immexpr) (bound : StringSet.t) : StringSet.t =
     match e with
@@ -954,6 +958,7 @@ let get_fv_info (e : 'a aexpr) : StringSet.t =
      |CPrim2 (_, _, _, (fvs, _))
      |CApp (_, _, _, (fvs, _))
      |CTuple (_, (fvs, _))
+     |CString (_, (fvs, _))
      |CGetItem (_, _, (fvs, _))
      |CSetItem (_, _, _, (fvs, _)) -> fvs
     | CImmExpr i -> (
@@ -992,6 +997,7 @@ let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
       CSetItem (tup_free, idx_free, new_val_free, (free_vars (ACExpr e), tag))
   | CLambda (args, body, tag) -> CLambda (args, free_vars_A body, (free_vars (ACExpr e), tag))
   | CImmExpr i -> CImmExpr (free_vars_I i)
+  | CString (n, tag) -> CString (n, (free_vars (ACExpr e), tag))
 
 and free_vars_I (e : 'a immexpr) : (StringSet.t * 'a) immexpr =
   match e with
@@ -1468,6 +1474,34 @@ and compile_cexpr
       @ c_thn
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
+  | CString (s, (_, tag)) ->
+      (* TODO: store multiple chars in one word (char = 1 byte) *)
+      let length = String.length s in
+      let padding = if length mod 2 == 0 then word_size else 0 in
+      (* element count + (# elements * word_size) + {0 or word_size if even} *)
+      let total_size = word_size + (length * word_size) + padding in
+      let store_length =
+        [ IInstrComment
+            ( IMov
+                ( Sized (QWORD_PTR, RegOffset (0, heap_reg)),
+                  Const (Int64.of_int ((length lsl 1) + 1)) ),
+              sprintf "string of length %d, tagged as string (plus 1)" length ) ]
+      in
+      let char_moves =
+        List.concat
+          (List.mapi
+             (fun i c ->
+               [ IMov (Reg scratch_reg, Const (Int64.of_int (Char.code c)));
+                 IMov (Sized (QWORD_PTR, RegOffset ((i + 1) * word_size, heap_reg)), Reg scratch_reg)
+               ] )
+             (List.of_seq (String.to_seq s)) )
+      in
+      let create_tup_val =
+        [ IMov (Reg RAX, Reg heap_reg);
+          IOr (Reg RAX, Const tuple_tag);
+          IAdd (Reg heap_reg, Const (Int64.of_int total_size)) ]
+      in
+      reserve total_size tag @ store_length @ char_moves @ create_tup_val
   | CTuple (exprs, (_, tag)) ->
       let tup_size = List.length exprs in
       let store_length =
@@ -1496,6 +1530,15 @@ and compile_cexpr
       let c_idx = compile_imm idx env lambda_tag in
       check_nil c_tup
       @ check_tup_tag c_tup "?err_get_not_tuple"
+      @ [ ILineComment "---- check not string ----";
+          IMov (Reg scratch_reg, c_tup);
+          ISub (Reg scratch_reg, Const tuple_tag);
+          IMov (Reg RAX, Sized (QWORD_PTR, RegOffset (0, scratch_reg)));
+          IAnd (Reg RAX, Const 1L);
+          IMov (Reg scratch_reg, c_tup);
+          ICmp (Reg RAX, Const 0L);
+          IJne (Label "?err_get_not_tuple");
+          ILineComment "-------------------------" ]
       @ check_num_tag c_idx "?err_get_not_num"
       @ [ IMov (Reg RAX, c_tup);
           ISub (Reg RAX, Const tuple_tag);
@@ -1512,6 +1555,15 @@ and compile_cexpr
       let c_val = compile_imm value env lambda_tag in
       check_nil c_tup
       @ check_tup_tag c_tup "?err_set_not_tuple"
+      @ [ ILineComment "---- check not string ----";
+          IMov (Reg scratch_reg, c_tup);
+          ISub (Reg scratch_reg, Const tuple_tag);
+          IMov (Reg RAX, Sized (QWORD_PTR, RegOffset (0, scratch_reg)));
+          IAnd (Reg RAX, Const 1L);
+          IMov (Reg scratch_reg, c_tup);
+          ICmp (Reg RAX, Const 0L);
+          IJne (Label "?err_set_not_tuple");
+          ILineComment "-------------------------" ]
       @ check_num_tag c_idx "?err_set_not_num"
       @ [ IMov (Reg RAX, c_tup);
           ISub (Reg RAX, Const tuple_tag);

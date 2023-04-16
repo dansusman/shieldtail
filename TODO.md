@@ -1,11 +1,9 @@
 # Strings
 
--   [ ] Strings/Chars in lexer.mll and parser.mly
+-   [x] Strings/Chars in lexer.mll and parser.mly
         -- multi-line strings?
--   [ ] EString, CString
--   [ ] Readdress the tagging pattern
-    -   use the MSB of arity to delineate
--   [ ] Allocation: should look like tuple cases
+-   [x] EString, ImmString
+-   [x] Allocation
 -   [ ] GC: need to sweep strings (copy/paste tuple case again?)
 -   [ ] Build out a string library
 -   [ ] toString
@@ -15,13 +13,17 @@
         -- str1 ^ str2
 -   [ ] charToOrd, ordToChar
 -   [ ] test a bunch of random special characters via ascii code and direct usage
+-   [ ] Add entry to DECISIONS.md for not supporting "alksdjfkls"[3] but instead (charAt "alsdkjfk" 54) or something
+-   [ ] Add natives? for strings
 
 ## Compilation
 
+-   [x] Readdress the tagging pattern
+    -   use the LSB of arity to delineate
+-   [x] Create and store strings on heap (return the heap_reg, ofc)
+-   [x] Tuple indexing and other existing things must not accept strings
 -   [ ] Tag error checks for prim ops
         -- concatenation needs to check for string tag for left and right
--   [ ] Create and store strings on heap (return the heap_reg, ofc)
--   [ ] Tuple indexing and other existing things must not accept strings
 
 # Dicts
 
