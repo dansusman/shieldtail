@@ -1,0 +1,15 @@
+-   string concatenation
+-   string comparison
+-   substrings
+-   charAt
+-   toLowercase
+-   toUppercase
+-   contains
+-   equals
+-   equalsIgnoreCase
+-   format
+-   indexOf
+-   conversion between tuples and strings
+-   intToString, boolToString, and vice versa
+-   split
+-   string slicing (like Python)

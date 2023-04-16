@@ -26,6 +26,16 @@ let tyident = "'"['a'-'z' 'A'-'Z' '_']['a'-'z' 'A'-'Z' '0'-'9' '_']*
 
 let space = [' ' '\t' '\n']+
 
+let escapes = "\\"['\\' '"' 'n' 't' 'b' 'r']
+
+let ascii_code  = "\\"['0'-'9']['0'-'9']['0'-'9']
+
+let escape_sequence = escapes | ascii_code
+
+let char = ['a'-'z' 'A'-'Z' '0'-'9' '~' '!' '@' '#' '$' '%' '^' '&' '*' '(' ')' ' ' '?' '%' '<' '>' ':' '-' '+' '{' '}' ',' '.' '\'' '[' ']' '|']  | escape_sequence
+
+let string = "\""(char*)"\""
+
 rule token = parse
   | '#' [^ '\n']+ { token lexbuf }
   | blank "(" { LPARENSPACE }
@@ -80,6 +90,7 @@ rule token = parse
   | "end" { END }
   | "rec" { REC }
   | "shadow" { SHADOW }
+  | string as s { STRING s }
   | ident as x { if x = "_" then UNDERSCORE else ID x }
   | eof { EOF }
   | _ as c { failwith (sprintf "Unrecognized character: %c" c) }

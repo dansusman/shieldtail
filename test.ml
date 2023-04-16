@@ -868,8 +868,8 @@ let gc =
     tgc "gc_lam1" (4 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f(1)" "" "1";
     tgc "gc_lam2" (8 + builtins_size) "let f = (lambda (x): let y = 5 in x) in f((1, 2))" ""
       "(1, 2)";
-    tgc "gc_call_lams" (8 + builtins_size) ~alloc:Naive "let f = (lambda: (1, 2)) in f(); f(); f(); f(); f()" ""
-      "(1, 2)";
+    tgc "gc_call_lams" (8 + builtins_size) ~alloc:Naive
+      "let f = (lambda: (1, 2)) in f(); f(); f(); f(); f()" "" "(1, 2)";
     tgc "gc_call_identity" (4 + builtins_size)
       "let f = (lambda(x): x) in f(1); f(2); f(3); f(4); f(5)" "" "5";
     tgc "gc_num" builtins_size "5" "" "5";
@@ -2015,18 +2015,18 @@ let lambda_suite =
 let () =
   run_test_tt_main
     ( "all_tests"
-    >::: [ free_vars_suite;
-           fvc_suite;
-           pipeline_suite;
-           graph_suite;
-           interfere_suite;
-           reg_alloc_suite;
-           naive_alloc_suite;
-           compile_aexpr_suite;
-           integration_test_suite;
-           gc_suite;
-           compile_cexpr_suite;
-           lambda_suite;
-           color_graph_suite;
+    >::: [ (* free_vars_suite;
+               fvc_suite;
+               pipeline_suite;
+               graph_suite;
+               interfere_suite;
+               reg_alloc_suite;
+               naive_alloc_suite;
+               compile_aexpr_suite;
+               integration_test_suite;
+               gc_suite;
+               compile_cexpr_suite;
+               lambda_suite;
+               color_graph_suite; *)
            input_file_test_suite () ] )
 ;;

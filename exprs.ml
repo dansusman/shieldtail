@@ -54,6 +54,7 @@ and 'a expr =
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
+  | EString of string * 'a
   | ENumber of int64 * 'a
   | EBool of bool * 'a
   | ENil of 'a
@@ -121,6 +122,7 @@ let get_tag_E e =
   | ESetItem (_, _, _, t) -> t
   | ESeq (_, _, t) -> t
   | ELambda (_, _, t) -> t
+  | EString (_, t) -> t
 ;;
 
 let get_tag_D d =
@@ -130,6 +132,7 @@ let get_tag_D d =
 
 let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   match e with
+  | EString (str, a) -> EString (str, f a)
   | ESeq (e1, e2, a) -> ESeq (map_tag_E f e1, map_tag_E f e2, f a)
   | ETuple (exprs, a) -> ETuple (List.map (map_tag_E f) exprs, f a)
   | EGetItem (e, idx, a) -> EGetItem (map_tag_E f e, map_tag_E f idx, f a)
@@ -242,6 +245,7 @@ let rec untagP (p : 'a program) : unit program =
 
 and untagE e =
   match e with
+  | EString (str, _) -> EString (str, ())
   | ESeq (e1, e2, _) -> ESeq (untagE e1, untagE e2, ())
   | ETuple (exprs, _) -> ETuple (List.map untagE exprs, ())
   | EGetItem (e, idx, _) -> EGetItem (untagE e, untagE idx, ())

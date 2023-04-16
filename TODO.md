@@ -1,7 +1,51 @@
--   [x] free_vars_cache
--   [x] interfere
--   [x] color_graph
--   [x] gc
--   [ ] input files
--   [x] move in compile tests
--   [x] reg alloc unit tests
+# Strings
+
+-   [ ] Strings/Chars in lexer.mll and parser.mly
+        -- multi-line strings?
+-   [ ] EString, CString
+-   [ ] Readdress the tagging pattern
+    -   use the MSB of arity to delineate
+-   [ ] Allocation: should look like tuple cases
+-   [ ] GC: need to sweep strings (copy/paste tuple case again?)
+-   [ ] Build out a string library
+-   [ ] toString
+-   [ ] split/slicing?
+-   [ ] Cast chars to strings
+-   [ ] Concatenation, string comparison
+        -- str1 ^ str2
+-   [ ] charToOrd, ordToChar
+-   [ ] test a bunch of random special characters via ascii code and direct usage
+
+## Compilation
+
+-   [ ] Tag error checks for prim ops
+        -- concatenation needs to check for string tag for left and right
+-   [ ] Create and store strings on heap (return the heap_reg, ofc)
+-   [ ] Tuple indexing and other existing things must not accept strings
+
+# Dicts
+
+-   [ ] Add parsing/lexing support
+-   [ ] Desugar appropriately
+-   [ ] Handle duplicate keys
+-   [ ] Make interesting test cases
+-   [ ] Be creative if we feel like it
+
+# Presentation
+
+-   [ ] Build a slide deck
+-   [ ] Divide and Conquer
+-   [ ] Practice a little
+-   [ ] Highlight important design decisions (see DECISIONS.md)
+-   [ ] Well-defined and Heavily Detailed README
+        -- usage examples
+        -- supported language features
+        -- high-level description
+        -- snake puns (maybe a snake starting with S?)
+
+# Other Ideas
+
+-   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)
+-   [ ] f strings? (if it's just a desugaring or
+        something comparably simple)
+-   [ ] StringBuilders?

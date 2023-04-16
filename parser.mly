@@ -8,6 +8,7 @@ let tok_span(start, endtok) = (Parsing.rhs_start_pos start, Parsing.rhs_end_pos 
 
 %token <int64> NUM
 %token <string> ID
+%token <string> STRING
 %token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LET IN EQUAL COMMA PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINT PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE EQEQ LESSSPACE GREATER LESSEQ GREATEREQ AND OR NOT COLONEQ SEMI NIL LAMBDA BEGIN END SHADOW REC UNDERSCORE
 
 %right SEMI
@@ -27,6 +28,7 @@ const :
   | TRUE { EBool(true, full_span()) }
   | FALSE { EBool(false, full_span()) }
   | NIL %prec SEMI { ENil(full_span()) }
+  | STRING { EString ($1, full_span()) }
 
 prim1 :
   | ADD1 { Add1 }
@@ -68,7 +70,6 @@ tuple_expr :
 
 id :
   | ID %prec COLON { EId($1, full_span()) }
-
 
 prim2 :
   | PLUS { Plus }

@@ -211,6 +211,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
   let rec wf_E e (env : scope_info name_envt) =
     debug_printf "In wf_E: %s\n" (ExtString.String.join ", " (env_keys env));
     match e with
+    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
     | EGetItem (e, idx, _) -> wf_E e env @ wf_E idx env
@@ -516,6 +517,7 @@ let desugar (p : sourcespan program) : sourcespan program =
     size_check_bind :: List.flatten (List.mapi tupleBind binds)
   and helpE e =
     match e with
+    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ESeq (e1, e2, tag) -> ELet ([(BBlank tag, helpE e1, tag)], helpE e2, tag)
     | ETuple (exprs, tag) -> ETuple (List.map helpE exprs, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE e, helpE idx, tag)
@@ -640,6 +642,7 @@ let rename_and_tag (p : tag program) : tag program =
         ((b', e', a) :: bindings', env'')
   and helpE env e =
     match e with
+    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ESeq (e1, e2, tag) -> ESeq (helpE env e1, helpE env e2, tag)
     | ETuple (es, tag) -> ETuple (List.map (helpE env) es, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE env e, helpE env idx, tag)
@@ -770,6 +773,7 @@ let anf (p : tag program) : unit aprogram =
         (CImmExpr imm, setup)
   and helpI (e : tag expr) : unit immexpr * unit anf_bind list =
     match e with
+    | EString (str, _) -> raise (NotYetImplemented "Implement str case")
     | ENumber (n, _) -> (ImmNum (n, ()), [])
     | EBool (b, _) -> (ImmBool (b, ()), [])
     | EId (name, _) -> (ImmId (name, ()), [])
