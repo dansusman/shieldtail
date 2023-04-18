@@ -17,6 +17,7 @@ extern SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) asm("equal");
 extern uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t amount_needed, uint64_t *first_frame, uint64_t *stack_top) asm("?try_gc");
 extern uint64_t *HEAP_END asm("?HEAP_END");
 extern uint64_t *HEAP asm("?HEAP");
+extern uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?concat");
 
 const uint64_t NUM_TAG_MASK = 0x0000000000000001;
 const uint64_t BOOL_TAG_MASK = 0x0000000000000007;
@@ -28,6 +29,9 @@ const uint64_t BOOL_TAG = 0x0000000000000007;
 const uint64_t TUPLE_TAG = 0x0000000000000001;
 const uint64_t CLOSURE_TAG = 0x0000000000000005;
 const uint64_t FORWARDING_TAG = 0x0000000000000003;
+const uint64_t SEQ_HEAP_TAG_MASK = 0x0000000000000001;
+const uint64_t STRING_HEAP_TAG = 0x0000000000000001;
+const uint64_t TUPLE_HEAP_TAG = 0x0000000000000000;
 const uint64_t BOOL_TRUE = 0xFFFFFFFFFFFFFFFF;
 const uint64_t BOOL_FALSE = 0x7FFFFFFFFFFFFFFF;
 const uint64_t NIL = ((uint64_t)NULL | TUPLE_TAG);
@@ -50,6 +54,8 @@ const uint64_t ERR_CALL_ARITY_ERR = 15;
 const uint64_t ERR_GET_NOT_NUM = 16;
 const uint64_t ERR_SET_NOT_NUM = 17;
 const uint64_t ERR_TUPLE_DESTRUCTURE_MISMATCH = 18;
+const uint64_t ERR_CONCAT_NOT_SEQ = 19;
+const uint64_t ERR_CONCAT_NOT_SAME = 20;
 
 size_t HEAP_SIZE;
 uint64_t *STACK_BOTTOM;
@@ -364,6 +370,14 @@ void error(uint64_t code, SNAKEVAL val)
     fprintf(stderr, "Error: tuple destructure length does not match with actual value, got ");
     printHelp(stderr, val);
     break;
+  case ERR_CONCAT_NOT_SEQ:
+    fprintf(stderr, "Error: concatenation expected a tuple or a string, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_CONCAT_NOT_SAME:
+    fprintf(stderr, "Error: concatenation expected either two tuples or two strings, but got a LHS of ");
+    printHelp(stderr, val);
+    break;
   default:
     fprintf(stderr, "Error: Unknown error code: %ld, val: ", code);
     printHelp(stderr, val);
@@ -461,6 +475,56 @@ uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t bytes_needed, uint64_t *cur_frame
     /* fprintf(stderr, "new_r15 = %p\n", new_r15); */
     /* naive_print_heap(HEAP, HEAP_END); */
     return new_r15;
+  }
+}
+
+uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
+{
+  uint64_t *seq1 = *((uint64_t *)val1 - TUPLE_TAG);
+  uint64_t *seq2 = *((uint64_t *)val2 - TUPLE_TAG);
+
+  // if one is a string and one is a tuple
+  if ((seq1[0] & SEQ_HEAP_TAG_MASK) != (seq2[0] & SEQ_HEAP_TAG_MASK))
+  {
+    error(ERR_CONCAT_NOT_SAME, val1);
+  }
+  if ((val1 & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG)
+  {
+    // take off the tag, we just want the machine size
+    uint64_t size1 = (seq1[0] - STRING_HEAP_TAG) / 2;
+    uint64_t size2 = (seq2[0] - STRING_HEAP_TAG) / 2;
+
+    // sum of the sizes, plus 1 word for size and maybe 1 for padding
+    uint64_t total_machine_size = (size1 + size2) + 1;
+    total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+
+    uint64_t* new_heap = alloc_ptr;
+
+    // do GC and get a new heap pointer if needed
+    if (HEAP_END - alloc_ptr < total_machine_size)
+    {
+      new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
+    }
+
+    // store the new combined size
+    new_heap[0] = size1 + size2 + STRING_HEAP_TAG;
+
+    // copy in all of the elements from the first string
+    for (int i = 0; i < size1; i++) {
+      new_heap[i + 1] = seq1[i + 1];
+    }
+
+    // copy in all of the elements from the second string
+    for (int i = 0; i < size2; i++) {
+      new_heap[i + size1 + 1] = seq2[i + 1];
+    }
+
+    // return what the heap pointer should be after this allocation
+    return new_heap + total_machine_size;
+  }
+  else
+  {
+    // TODO concat tuples (or throw error)
   }
 }
 

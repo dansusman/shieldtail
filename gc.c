@@ -16,7 +16,7 @@ void printHelp(FILE *out, SNAKEVAL val);
 SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("?print_stack");
 extern uint64_t NUM_TAG_MASK;
 extern uint64_t CLOSURE_TAG_MASK;
-extern uint64_t TUPLE_TAG_MASK;
+extern uint64_t SEQ_TAG_MASK;
 extern uint64_t FORWARDING_TAG_MASK;
 extern uint64_t CLOSURE_TAG;
 extern uint64_t TUPLE_TAG;
@@ -73,7 +73,7 @@ bool valIsClosure(uint64_t val)
 
 bool valIsTuple(uint64_t val)
 {
-  return (val & TUPLE_TAG_MASK) == TUPLE_TAG;
+  return (val & SEQ_TAG_MASK) == TUPLE_TAG;
 }
 
 bool valIsForwarding(uint64_t val)
