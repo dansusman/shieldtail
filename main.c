@@ -17,7 +17,7 @@ extern SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) asm("equal");
 extern uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t amount_needed, uint64_t *first_frame, uint64_t *stack_top) asm("?try_gc");
 extern uint64_t *HEAP_END asm("?HEAP_END");
 extern uint64_t *HEAP asm("?HEAP");
-extern uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?concat");
+extern uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?concat");
 
 const uint64_t NUM_TAG_MASK = 0x0000000000000001;
 const uint64_t BOOL_TAG_MASK = 0x0000000000000007;
@@ -478,11 +478,10 @@ uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t bytes_needed, uint64_t *cur_frame
   }
 }
 
-uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
+uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
 {
-  uint64_t *seq1 = *((uint64_t *)val1 - TUPLE_TAG);
-  uint64_t *seq2 = *((uint64_t *)val2 - TUPLE_TAG);
-
+  uint64_t *seq1 = (uint64_t *)(val1 - TUPLE_TAG);
+  uint64_t *seq2 = (uint64_t *)(val2 - TUPLE_TAG);
   // if one is a string and one is a tuple
   if ((seq1[0] & SEQ_HEAP_TAG_MASK) != (seq2[0] & SEQ_HEAP_TAG_MASK))
   {
@@ -497,12 +496,14 @@ uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cu
     // sum of the sizes, plus 1 word for size and maybe 1 for padding
     uint64_t total_machine_size = (size1 + size2) + 1;
     total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+    fprintf(stderr, "total machine size: %ld\n", total_machine_size);
 
-    uint64_t* new_heap = alloc_ptr;
+    uint64_t *new_heap = alloc_ptr;
 
     // do GC and get a new heap pointer if needed
     if (HEAP_END - alloc_ptr < total_machine_size)
     {
+      fprintf(stderr, "running GC\n");
       new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
     }
 
@@ -510,17 +511,34 @@ uint64_t *concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cu
     new_heap[0] = size1 + size2 + STRING_HEAP_TAG;
 
     // copy in all of the elements from the first string
-    for (int i = 0; i < size1; i++) {
+    for (int i = 0; i < size1; i++)
+    {
+      fprintf(stderr, "copying %c\n", (char)seq1[i + 1]);
+
       new_heap[i + 1] = seq1[i + 1];
     }
 
+    fprintf(stderr, "copying from RHS\n");
+
     // copy in all of the elements from the second string
-    for (int i = 0; i < size2; i++) {
+    for (int i = 0; i < size2; i++)
+    {
+      fprintf(stderr, "copying %c\n", (char)seq2[i + 1]);
+
       new_heap[i + size1 + 1] = seq2[i + 1];
     }
 
+    for (int i = 0; i < size1 + size2; i++)
+    {
+      fprintf(stderr, "%c", (char)new_heap[i + 1]);
+    }
+    fprintf(stderr, "\n", *new_heap);
+
+    fprintf(stderr, "old heap: %p\n", new_heap);
+    fprintf(stderr, "new heap: %p\n", new_heap + total_machine_size);
     // return what the heap pointer should be after this allocation
-    return new_heap + total_machine_size;
+    // TODO make separate helper?
+    return total_machine_size * 8;
   }
   else
   {

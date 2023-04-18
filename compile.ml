@@ -1414,8 +1414,13 @@ and compile_cexpr
           check_tup_tag c_left "?err_concat_not_seq"
           @ check_tup_tag c_right "?err_concat_not_seq"
           @ native_call (Label "?concat") [c_left; c_right; Reg heap_reg; Reg RBP; Reg RSP]
-          @ [ IInstrComment (IMov (Reg heap_reg, Reg RAX), "Save the new value of the heap_reg");
-              IAdd (Reg RAX, HexConst tuple_tag) ]
+          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save total machine size to scratch");
+              IMov (Reg RAX, Reg heap_reg);
+              IOr (Reg RAX, Const tuple_tag);
+              IInstrComment (IAdd (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
+          (* [ IMov (Reg RAX, Reg heap_reg);
+             IOr (Reg RAX, Const tuple_tag);
+             IAdd (Reg heap_reg, Const (Int64.of_int total_size)) ] *)
       | Plus ->
           check_num_tag c_left "?err_arith_not_num"
           @ check_num_tag c_right "?err_arith_not_num"
@@ -1791,6 +1796,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern ?HEAP\n\
      extern ?HEAP_END\n\
      extern ?set_stack_bottom\n\
+     extern ?concat\n\
      global ?our_code_starts_here"
   in
   let suffix =
