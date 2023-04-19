@@ -153,13 +153,16 @@ void printHelp(FILE *out, SNAKEVAL val)
       return;
     }
     uint64_t len = addr[0];
-    if (len & 0x1)
+    if (len & STRING_HEAP_TAG)
     {
       len /= 2; // length is encoded
       fprintf(out, "\"");
-      for (uint64_t i = 1; i <= len; i++)
+      char *str_addr = (char *)addr;
+      for (uint64_t i = 8; i < len + 8; i++)
       {
-        fprintf(out, "%c", (char)(addr[i]));
+
+        // fprintf(out, "%ld\n", (str_addr[i]));
+        fprintf(out, "%c", (char)(str_addr[i]));
       }
       fprintf(out, "\"");
       // Unmark this tuple: restore its length
@@ -500,13 +503,13 @@ uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur
   }
   else
   {
-    // TODO concat tuples (or throw error)
     size1 = seq1[0] / 2;
     size2 = seq2[0] / 2;
   }
 
   // sum of the sizes, plus 1 word for size and maybe 1 for padding
-  uint64_t total_machine_size = (size1 + size2) + 1;
+  uint64_t summed_size = size1 + size2;
+  uint64_t total_machine_size = (is_string ? (summed_size / 8 + 1) : (summed_size)) + 1;
   total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
 
   uint64_t *new_heap = alloc_ptr;
@@ -520,16 +523,40 @@ uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur
   // store the new combined size
   new_heap[0] = (size1 + size2) * 2 + (is_string ? STRING_HEAP_TAG : 0);
 
-  // copy in all of the elements from the first string
+  int j = 8;
+  // copy in all of the elements from the first heap sequence
   for (int i = 0; i < size1; i++)
   {
-    new_heap[i + 1] = seq1[i + 1];
+    if (is_string)
+    {
+      // strings store multiple chars in one word so we need
+      // to account for different heap addresses
+      char *char_thing = (char *)seq1;
+      char *new_heap_thing = (char *)new_heap;
+      new_heap_thing[j] = char_thing[i + 8];
+    }
+    else
+    {
+      new_heap[i + 1] = seq1[i + 1];
+    }
+
+    j++;
   }
 
-  // copy in all of the elements from the second string
+  // copy in all of the elements from the second heap sequence
   for (int i = 0; i < size2; i++)
   {
-    new_heap[i + size1 + 1] = seq2[i + 1];
+    if (is_string)
+    {
+      char *char_thing = (char *)seq2;
+      char *new_heap_thing = (char *)new_heap;
+      new_heap_thing[j] = char_thing[i + 8];
+    }
+    else
+    {
+      new_heap[i + size1 + 1] = seq2[i + 1];
+    }
+    j++;
   }
 
   // return what the heap pointer should be after this allocation

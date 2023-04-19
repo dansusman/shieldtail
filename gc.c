@@ -1,5 +1,6 @@
 #include "gc.h"
 
+#define DEBUG
 #define OUT stdout
 #ifdef DEBUG
 #define DEBUG_PRINT(...) fprintf(OUT, __VA_ARGS__)
@@ -18,9 +19,11 @@ extern uint64_t NUM_TAG_MASK;
 extern uint64_t CLOSURE_TAG_MASK;
 extern uint64_t TUPLE_TAG_MASK;
 extern uint64_t FORWARDING_TAG_MASK;
+extern uint64_t SEQ_HEAP_TAG_MASK;
 extern uint64_t CLOSURE_TAG;
 extern uint64_t TUPLE_TAG;
 extern uint64_t FORWARDING_TAG;
+extern uint64_t STRING_HEAP_TAG;
 extern uint64_t NIL;
 extern uint64_t tupleCounter;
 extern uint64_t *STACK_BOTTOM;
@@ -136,7 +139,13 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
     return heap_top;
   }
 
-  uint64_t arity = tuple_ptr[0] / 2;
+  uint64_t arity = tuple_ptr[0];
+  bool is_string = (arity & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+  arity = arity / 2;
+  if (is_string)
+  {
+    arity = arity / 8 + 1;
+  }
   uint64_t tuple_length = 1 + arity;
   uint64_t padded_tuple_length = tuple_length + (tuple_length % 2);
 

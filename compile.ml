@@ -44,6 +44,8 @@ let tuple_tag = 0x0000000000000001L
 
 let tuple_tag_mask = 0x0000000000000007L
 
+let string_tag = 1
+
 let const_nil = HexConst tuple_tag
 
 let err_COMP_NOT_NUM = 1L
@@ -1414,7 +1416,7 @@ and compile_cexpr
           check_tup_tag c_left "?err_concat_not_seq"
           @ check_tup_tag c_right "?err_concat_not_seq"
           @ native_call (Label "?concat") [c_left; c_right; Reg heap_reg; Reg RBP; Reg RSP]
-          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save total machine size to scratch");
+          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
               IMov (Reg RAX, Reg heap_reg);
               IOr (Reg RAX, Const tuple_tag);
               IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
@@ -1487,16 +1489,16 @@ and compile_cexpr
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
   | CString (s, (_, tag)) ->
-      (* TODO: store multiple chars in one word (char = 1 byte) *)
       let length = String.length s in
       let padding = if length mod 2 == 0 then word_size else 0 in
       (* element count + (# elements * word_size) + {0 or word_size if even} *)
-      let total_size = word_size + (length * word_size) + padding in
+      let total_size = word_size + length + padding in
+      let aligned_total = (((total_size - 1) / 16) + 1) * 16 in
       let store_length =
         [ IInstrComment
             ( IMov
                 ( Sized (QWORD_PTR, RegOffset (0, heap_reg)),
-                  Const (Int64.of_int ((length lsl 1) + 1)) ),
+                  Const (Int64.of_int ((length lsl 1) + string_tag)) ),
               sprintf "string of length %d, tagged as string (plus 1)" length ) ]
       in
       let char_moves =
@@ -1504,16 +1506,15 @@ and compile_cexpr
           (List.mapi
              (fun i c ->
                [ IMov (Reg scratch_reg, Const (Int64.of_int (Char.code c)));
-                 IMov (Sized (QWORD_PTR, RegOffset ((i + 1) * word_size, heap_reg)), Reg scratch_reg)
-               ] )
+                 IMov (Sized (QWORD_PTR, RegOffset (i + word_size, heap_reg)), Reg scratch_reg) ] )
              (List.of_seq (String.to_seq s)) )
       in
       let create_tup_val =
         [ IMov (Reg RAX, Reg heap_reg);
           IOr (Reg RAX, Const tuple_tag);
-          IAdd (Reg heap_reg, Const (Int64.of_int total_size)) ]
+          IAdd (Reg heap_reg, Const (Int64.of_int aligned_total)) ]
       in
-      reserve total_size tag @ store_length @ char_moves @ create_tup_val
+      reserve aligned_total tag @ store_length @ char_moves @ create_tup_val
   | CTuple (exprs, (_, tag)) ->
       let tup_size = List.length exprs in
       let store_length =
@@ -1706,17 +1707,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-    else [] )
+      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+      else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-    then []
-    else
-      [ IInstrComment
-          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-            sprintf "Popping %d arguments" num_stack_args ) ] )
+      then []
+      else
+        [ IInstrComment
+            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+              sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]

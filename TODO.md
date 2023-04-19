@@ -5,7 +5,7 @@
 -   [x] EString, ImmString
 -   [x] Allocation
 -   [ ] GC: need to sweep strings (copy/paste tuple case again?)
--   [ ] Char doesn't need a whole word
+-   [x] Char doesn't need a whole word
 -   [ ] Build out a string library
 -   [ ] toString
 -   [ ] split/slicing?
@@ -49,6 +49,7 @@
 
 # Other Ideas
 
+-   [ ] Decouple tuple and string logic?
 -   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)
 -   [ ] f strings? (if it's just a desugaring or
         something comparably simple)
