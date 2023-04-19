@@ -1,0 +1,5 @@
+def churn(n): 
+    if n == 0: 0 else: (1, 2); 
+    churn(sub1(n))
+
+ churn(100)

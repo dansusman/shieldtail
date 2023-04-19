@@ -1490,10 +1490,14 @@ and compile_cexpr
       @ c_els @ [ILabel done_label]
   | CString (s, (_, tag)) ->
       let length = String.length s in
-      let padding = if length mod 2 == 0 then word_size else 0 in
-      (* element count + (# elements * word_size) + {0 or word_size if even} *)
-      let total_size = word_size + length + padding in
-      let aligned_total = (((total_size - 1) / 16) + 1) * 16 in
+      (* element count + (# letters)  *)
+      let total_size = word_size + length in
+      (* align to word_size *)
+      let word_adjusted = (((total_size - 1) / word_size) + 1) * word_size in
+      (* calculate padding *)
+      let padding = if word_adjusted mod (2 * word_size) == 0 then 0 else word_size in
+      (* total size needed *)
+      let aligned_total = word_adjusted + padding in
       let store_length =
         [ IInstrComment
             ( IMov
