@@ -36,6 +36,7 @@ let name_of_op1 op =
 
 let string_of_op2 op =
   match op with
+  | Concat -> "^"
   | Plus -> "+"
   | Minus -> "-"
   | Times -> "*"
@@ -51,6 +52,7 @@ let string_of_op2 op =
 
 let name_of_op2 op =
   match op with
+  | Concat -> "Concat"
   | Plus -> "Plus"
   | Minus -> "Minus"
   | Times -> "Times"
@@ -91,7 +93,7 @@ and string_of_expr_with (depth : int) (print_a : 'a -> string) (e : 'a expr) : s
   then "..."
   else
     match e with
-    | EString (str, a) -> str ^ print_a a
+    | EString (str, a) -> "\"" ^ str ^ "\"" ^ print_a a
     | ESeq (e1, e2, _) -> string_of_expr e1 ^ "; " ^ string_of_expr e2
     | ETuple ([e], a) -> "(" ^ string_of_expr e ^ ",)" ^ print_a a
     | ETuple (exprs, _) -> "(" ^ ExtString.String.join ", " (List.map string_of_expr exprs) ^ ")"

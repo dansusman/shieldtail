@@ -82,6 +82,10 @@ let err_SET_NOT_NUM = 17L
 
 let err_TUPLE_DESTRUCTURE_MISMATCH = 18L
 
+let err_CONCAT_NOT_SEQ = 19L
+
+let err_CONCAT_NOT_SAME = 20L
+
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -1406,6 +1410,14 @@ and compile_cexpr
             ILabel label ]
       in
       match op with
+      | Concat ->
+          check_tup_tag c_left "?err_concat_not_seq"
+          @ check_tup_tag c_right "?err_concat_not_seq"
+          @ native_call (Label "?concat") [c_left; c_right; Reg heap_reg; Reg RBP; Reg RSP]
+          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save total machine size to scratch");
+              IMov (Reg RAX, Reg heap_reg);
+              IOr (Reg RAX, Const tuple_tag);
+              IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
       | Plus ->
           check_num_tag c_left "?err_arith_not_num"
           @ check_num_tag c_right "?err_arith_not_num"
@@ -1694,17 +1706,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-      else [] )
+    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+    else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-      then []
-      else
-        [ IInstrComment
-            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-              sprintf "Popping %d arguments" num_stack_args ) ] )
+    then []
+    else
+      [ IInstrComment
+          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+            sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
@@ -1781,6 +1793,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern ?HEAP\n\
      extern ?HEAP_END\n\
      extern ?set_stack_bottom\n\
+     extern ?concat\n\
      global ?our_code_starts_here"
   in
   let suffix =
@@ -1803,7 +1816,8 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_call_arity_err:%s\n\
        ?err_get_not_num:%s\n\
        ?err_set_not_num:%s\n\
-       ?err_tuple_destructure_mismatch:%s\n"
+       ?err_tuple_destructure_mismatch:%s\n\
+       ?err_concat_not_seq:%s\n"
       (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
@@ -1823,6 +1837,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm (native_call (Label "?error") [Const err_SET_NOT_NUM; Reg scratch_reg]))
       (to_asm
          (native_call (Label "?error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
+      (to_asm (native_call (Label "?error") [Const err_CONCAT_NOT_SEQ; Reg scratch_reg]))
   in
   match anfed with
   | AProgram (body, (_, tag)) ->

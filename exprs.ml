@@ -20,6 +20,7 @@ type prim1 =
   | PrintStack
 
 type prim2 =
+  | Concat  
   | Plus
   | Minus
   | Times

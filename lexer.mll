@@ -74,6 +74,7 @@ rule token = parse
   | ")" { RPAREN }
   | "[" { LBRACK }
   | "]" { RBRACK }
+  | "^" { CONCAT }
   | "+" { PLUS }
   | "-" { MINUS }
   | "*" { TIMES }
