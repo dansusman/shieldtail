@@ -496,7 +496,6 @@ uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur
     // sum of the sizes, plus 1 word for size and maybe 1 for padding
     uint64_t total_machine_size = (size1 + size2) + 1;
     total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
-    fprintf(stderr, "total machine size: %ld\n", total_machine_size);
 
     uint64_t *new_heap = alloc_ptr;
 
@@ -508,7 +507,7 @@ uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur
     }
 
     // store the new combined size
-    new_heap[0] = size1 + size2 + STRING_HEAP_TAG;
+    new_heap[0] = (size1 + size2) * 2 + STRING_HEAP_TAG;
 
     // copy in all of the elements from the first string
     for (int i = 0; i < size1; i++)
