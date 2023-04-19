@@ -5,12 +5,14 @@
 -   [x] EString, ImmString
 -   [x] Allocation
 -   [ ] GC: need to sweep strings (copy/paste tuple case again?)
+-   [ ] Char doesn't need a whole word
 -   [ ] Build out a string library
 -   [ ] toString
 -   [ ] split/slicing?
 -   [ ] Cast chars to strings
--   [ ] Concatenation, string comparison
+-   [x] Concatenation
         -- str1 ^ str2
+-   [ ] String comparison
 -   [ ] charToOrd, ordToChar
 -   [ ] test a bunch of random special characters via ascii code and direct usage
 -   [ ] Add entry to DECISIONS.md for not supporting "alksdjfkls"[3] but instead (charAt "alsdkjfk" 54) or something

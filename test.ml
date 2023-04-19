@@ -894,7 +894,13 @@ let gc =
     tgc "gc_not_needed" (4 + builtins_size) "let garbage = (1, 2) in 1" "" "1" ]
 ;;
 
-let gc_suite = "gc_suite" >::: oom @ gc
+let string_gc =
+  [ tgc "gc_string_simple" (24 + builtins_size) "\"hello, world\"" "" "\"hello, world\"";
+    tgc "gc_string_stress" (20 + builtins_size)
+      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0" ]
+;;
+
+let gc_suite = "gc_suite" >::: oom @ gc @ string_gc
 
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
@@ -2028,5 +2034,6 @@ let () =
                compile_cexpr_suite;
                lambda_suite;
                color_graph_suite; *)
-           input_file_test_suite () ] )
+           input_file_test_suite ();
+           gc_suite ] )
 ;;
