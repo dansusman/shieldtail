@@ -487,62 +487,53 @@ uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur
   {
     error(ERR_CONCAT_NOT_SAME, val1);
   }
-  if ((val1 & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG)
+
+  bool is_string = (seq1[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+  uint64_t size1;
+  uint64_t size2;
+
+  if (is_string)
   {
     // take off the tag, we just want the machine size
-    uint64_t size1 = (seq1[0] - STRING_HEAP_TAG) / 2;
-    uint64_t size2 = (seq2[0] - STRING_HEAP_TAG) / 2;
-
-    // sum of the sizes, plus 1 word for size and maybe 1 for padding
-    uint64_t total_machine_size = (size1 + size2) + 1;
-    total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
-
-    uint64_t *new_heap = alloc_ptr;
-
-    // do GC and get a new heap pointer if needed
-    if (HEAP_END - alloc_ptr < total_machine_size)
-    {
-      fprintf(stderr, "running GC\n");
-      new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
-    }
-
-    // store the new combined size
-    new_heap[0] = (size1 + size2) * 2 + STRING_HEAP_TAG;
-
-    // copy in all of the elements from the first string
-    for (int i = 0; i < size1; i++)
-    {
-      fprintf(stderr, "copying %c\n", (char)seq1[i + 1]);
-
-      new_heap[i + 1] = seq1[i + 1];
-    }
-
-    fprintf(stderr, "copying from RHS\n");
-
-    // copy in all of the elements from the second string
-    for (int i = 0; i < size2; i++)
-    {
-      fprintf(stderr, "copying %c\n", (char)seq2[i + 1]);
-
-      new_heap[i + size1 + 1] = seq2[i + 1];
-    }
-
-    for (int i = 0; i < size1 + size2; i++)
-    {
-      fprintf(stderr, "%c", (char)new_heap[i + 1]);
-    }
-    fprintf(stderr, "\n", *new_heap);
-
-    fprintf(stderr, "old heap: %p\n", new_heap);
-    fprintf(stderr, "new heap: %p\n", new_heap + total_machine_size);
-    // return what the heap pointer should be after this allocation
-    // TODO make separate helper?
-    return total_machine_size * 8;
+    size1 = (seq1[0] - STRING_HEAP_TAG) / 2;
+    size2 = (seq2[0] - STRING_HEAP_TAG) / 2;
   }
   else
   {
     // TODO concat tuples (or throw error)
+    size1 = seq1[0] / 2;
+    size2 = seq2[0] / 2;
   }
+
+  // sum of the sizes, plus 1 word for size and maybe 1 for padding
+  uint64_t total_machine_size = (size1 + size2) + 1;
+  total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+
+  uint64_t *new_heap = alloc_ptr;
+
+  // do GC and get a new heap pointer if needed
+  if (HEAP_END - alloc_ptr < total_machine_size)
+  {
+    new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
+  }
+
+  // store the new combined size
+  new_heap[0] = (size1 + size2) * 2 + (is_string ? STRING_HEAP_TAG : 0);
+
+  // copy in all of the elements from the first string
+  for (int i = 0; i < size1; i++)
+  {
+    new_heap[i + 1] = seq1[i + 1];
+  }
+
+  // copy in all of the elements from the second string
+  for (int i = 0; i < size2; i++)
+  {
+    new_heap[i + size1 + 1] = seq2[i + 1];
+  }
+
+  // return what the heap pointer should be after this allocation
+  return new_heap + total_machine_size;
 }
 
 int main(int argc, char **argv)
