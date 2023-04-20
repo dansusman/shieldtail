@@ -56,6 +56,7 @@ rule token = parse
   | "nil" { NIL }
   | "true" { TRUE }
   | "false" { FALSE }
+  | "chr" { CHR }
   | "istuple" { ISTUPLE }
   | "isbool" { ISBOOL }
   | "isnum" { ISNUM }

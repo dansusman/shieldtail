@@ -7,10 +7,19 @@ open Errors
 open Graph
 module StringSet = Set.Make (String)
 
-let c_global_function_names = ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"]
+let c_global_function_names =
+  ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"]
+;;
 
 let c_global_function_arities =
-  [("input", 0); ("print", 1); ("equal", 2); ("error", 2); ("print_stack", 1); ("len", 1); ("chr", 1); ("ord", 1)]
+  [ ("input", 0);
+    ("print", 1);
+    ("equal", 2);
+    ("error", 2);
+    ("print_stack", 1);
+    ("len", 1);
+    ("chr", 1);
+    ("ord", 1) ]
 ;;
 
 type 'a name_envt = (string * 'a) list
@@ -1392,6 +1401,12 @@ and compile_cexpr
       | IsTuple ->
           let is_tup_label = sprintf "is_tup_%d" tag in
           predicate_prim1_instrs is_tup_label tuple_tag_mask tuple_tag
+      | Chr ->
+          native_call (Label "chr") [e_reg; Reg heap_reg; Reg RBP; Reg RSP]
+          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
+              IMov (Reg RAX, Reg heap_reg);
+              IOr (Reg RAX, Const tuple_tag);
+              IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
       | Not ->
           check_bool_tag e_reg "?err_logic_not_bool"
           @ [ IMov (Reg RAX, e_reg);

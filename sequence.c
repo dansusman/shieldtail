@@ -186,7 +186,7 @@ uint64_t intToChar(SNAKEVAL num, uint64_t *alloc_ptr, uint64_t *cur_frame, uint6
 
   // store the new string with size 1 (to tagged snake val)
   new_heap[0] = 1 * 2 + 1;
-  new_heap[1] = (char)num;
+  new_heap[1] = (char)(num / 2);
 
   // return what the heap pointer should be after this allocation
   return new_heap + total_machine_size;
