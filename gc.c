@@ -140,16 +140,14 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
 
   uint64_t arity = tuple_ptr[0];
   bool is_string = (arity & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
-  fprintf(stderr, "Is string?: %d", is_string);
   arity = arity / 2;
   if (is_string)
   {
     arity = arity / 8 + 1;
   }
-  fprintf(stderr, "arity: %d", arity);
+
   uint64_t tuple_length = 1 + arity;
   uint64_t padded_tuple_length = tuple_length + (tuple_length % 2);
-  fprintf(stderr, "padded: %d", padded_tuple_length);
 
   for (int i = 0; i < padded_tuple_length; i++)
   {

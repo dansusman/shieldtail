@@ -763,6 +763,7 @@ let anf (p : tag program) : unit aprogram =
         let e1_ans, e1_setup = helpC e1 in
         let e2_ans, e2_setup = helpC e2 in
         (e2_ans, e1_setup @ [BSeq e1_ans] @ e2_setup)
+    | EString (s, _) -> (CString (s, ()), [])
     | ETuple (args, _) ->
         let new_args, new_setup = List.split (List.map helpI args) in
         (CTuple (new_args, ()), List.concat new_setup)
@@ -1711,17 +1712,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-      else [] )
+    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+    else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-      then []
-      else
-        [ IInstrComment
-            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-              sprintf "Popping %d arguments" num_stack_args ) ] )
+    then []
+    else
+      [ IInstrComment
+          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+            sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]

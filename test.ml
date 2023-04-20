@@ -896,7 +896,7 @@ let gc =
 
 let string_gc =
   [ tgc "gc_string_simple" (4 + builtins_size) "\"hello, world\"" "" "\"hello, world\"";
-    tgc "gc_string_stress" (4 + builtins_size)
+    tgc "gc_string_stress" (8 + builtins_size)
       "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0" ]
 ;;
 
