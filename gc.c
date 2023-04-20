@@ -68,6 +68,12 @@ void smarter_print_heap(uint64_t *from_start, uint64_t *from_end, uint64_t *to_s
 #endif
 }
 
+// converts the number of letters in a string to the number of words those letters take up
+uint64_t letters_to_words(uint64_t letters)
+{
+  return letters / 8 + 1;
+}
+
 bool valIsClosure(uint64_t val)
 {
   return (val & CLOSURE_TAG_MASK) == CLOSURE_TAG;

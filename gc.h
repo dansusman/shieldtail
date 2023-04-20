@@ -61,3 +61,5 @@ uint64_t *copy_if_needed(uint64_t *racer_val_addr, uint64_t *heap_top);
     The new location within to_start at which to allocate new data
  */
 uint64_t *gc(uint64_t *bottom_frame, uint64_t *top_frame, uint64_t *top_stack, uint64_t *from_start, uint64_t *from_end, uint64_t *to_start);
+
+uint64_t letters_to_words(uint64_t letters);

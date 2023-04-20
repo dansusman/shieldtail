@@ -481,12 +481,6 @@ uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t bytes_needed, uint64_t *cur_frame
   }
 }
 
-// converts the number of letters in a string to the number of words those letters take up
-uint64_t letters_to_words(uint64_t letters)
-{
-  return letters / 8 + 1;
-}
-
 uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
 {
   uint64_t *seq1 = (uint64_t *)(val1 - TUPLE_TAG);
