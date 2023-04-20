@@ -143,7 +143,8 @@ uint64_t *copyTuple(uint64_t *tuple_addr, uint64_t *heap_top)
   arity = arity / 2;
   if (is_string)
   {
-    arity = arity / 8 + 1;
+    // divide by 8 rounded up to get the number of words from the number of letters
+    arity = letters_to_words(arity);
   }
 
   uint64_t tuple_length = 1 + arity;

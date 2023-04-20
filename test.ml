@@ -900,8 +900,11 @@ let string_gc =
       "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0" ]
 ;;
 
+(* TODO test churn with concatenation *)
+
 let gc_suite = "gc_suite" >::: oom @ gc @ string_gc
 
+(* TODO test special characters (like \n) *)
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
 let compile_aexpr_suite =
@@ -2034,6 +2037,6 @@ let () =
                compile_cexpr_suite;
                lambda_suite;
                color_graph_suite; *)
-           (* input_file_test_suite () *)
+           input_file_test_suite ();
            gc_suite ] )
 ;;
