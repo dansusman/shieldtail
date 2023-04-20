@@ -4,6 +4,7 @@
 #include <string.h>
 #include <limits.h>
 #include "gc.h"
+#include "sequence.h"
 
 typedef uint64_t SNAKEVAL;
 
@@ -17,7 +18,6 @@ extern SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) asm("equal");
 extern uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t amount_needed, uint64_t *first_frame, uint64_t *stack_top) asm("?try_gc");
 extern uint64_t *HEAP_END asm("?HEAP_END");
 extern uint64_t *HEAP asm("?HEAP");
-extern uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?concat");
 
 const uint64_t NUM_TAG_MASK = 0x0000000000000001;
 const uint64_t BOOL_TAG_MASK = 0x0000000000000007;
@@ -56,6 +56,9 @@ const uint64_t ERR_SET_NOT_NUM = 17;
 const uint64_t ERR_TUPLE_DESTRUCTURE_MISMATCH = 18;
 const uint64_t ERR_CONCAT_NOT_SEQ = 19;
 const uint64_t ERR_CONCAT_NOT_SAME = 20;
+const uint64_t ERR_LENGTH_NOT_SEQ = 21;
+const uint64_t ERR_ORD_NOT_CHAR = 22;
+const uint64_t ERR_CHR_NOT_NUM = 23;
 
 size_t HEAP_SIZE;
 uint64_t *STACK_BOTTOM;
@@ -381,6 +384,18 @@ void error(uint64_t code, SNAKEVAL val)
     fprintf(stderr, "Error: concatenation expected either two tuples or two strings, but got a LHS of ");
     printHelp(stderr, val);
     break;
+  case ERR_LENGTH_NOT_SEQ:
+    fprintf(stderr, "Error: len expected either a tuple or a string, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_ORD_NOT_CHAR:
+    fprintf(stderr, "Error: ord expected a string of length 1, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_CHR_NOT_NUM:
+    fprintf(stderr, "Error: chr expected a number <= 255 and >= 0, but got ");
+    printHelp(stderr, val);
+    break;
   default:
     fprintf(stderr, "Error: Unknown error code: %ld, val: ", code);
     printHelp(stderr, val);
@@ -479,84 +494,6 @@ uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t bytes_needed, uint64_t *cur_frame
     /* naive_print_heap(HEAP, HEAP_END); */
     return new_r15;
   }
-}
-
-uint64_t concat(SNAKEVAL val1, SNAKEVAL val2, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
-{
-  uint64_t *seq1 = (uint64_t *)(val1 - TUPLE_TAG);
-  uint64_t *seq2 = (uint64_t *)(val2 - TUPLE_TAG);
-  // if one is a string and one is a tuple
-  if ((seq1[0] & SEQ_HEAP_TAG_MASK) != (seq2[0] & SEQ_HEAP_TAG_MASK))
-  {
-    error(ERR_CONCAT_NOT_SAME, val1);
-  }
-
-  bool is_string = (seq1[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
-  uint64_t size1;
-  uint64_t size2;
-
-  if (is_string)
-  {
-    // take off the tag, we just want the machine size
-    size1 = (seq1[0] - STRING_HEAP_TAG) / 2;
-    size2 = (seq2[0] - STRING_HEAP_TAG) / 2;
-  }
-  else
-  {
-    size1 = seq1[0] / 2;
-    size2 = seq2[0] / 2;
-  }
-
-  // sum of the sizes, plus 1 word for size and maybe 1 for padding
-  uint64_t summed_size = size1 + size2;
-  uint64_t total_machine_size = (is_string ? letters_to_words(summed_size) : (summed_size)) + 1;
-  total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
-
-  uint64_t *new_heap = alloc_ptr;
-
-  // do GC and get a new heap pointer if needed
-  if (HEAP_END - alloc_ptr < total_machine_size)
-  {
-    new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
-  }
-
-  // store the new combined size
-  new_heap[0] = (size1 + size2) * 2 + (is_string ? STRING_HEAP_TAG : 0);
-
-  if (is_string)
-  {
-    char *seq1_char = (char *)seq1;
-    char *seq2_char = (char *)seq2;
-    char *new_str = (char *)new_heap;
-    // copy in all of the elements from the first heap sequence
-    for (int i = 8; i < size1 + 8; i++)
-    {
-      // strings store multiple chars in one word so we need to account for different heap addresses
-      new_str[i] = seq1_char[i];
-    }
-    // copy in all of the elements from the second heap sequence
-    for (int i = 8; i < size2 + 8; i++)
-    {
-      new_str[i + size1] = seq2_char[i];
-    }
-  }
-  else
-  {
-    // copy in all of the elements from the first heap sequence
-    for (int i = 0; i < size1; i++)
-    {
-      new_heap[i + 1] = seq1[i + 1];
-    }
-
-    // copy in all of the elements from the second heap sequence
-    for (int i = 0; i < size2; i++)
-    {
-      new_heap[i + size1 + 1] = seq2[i + 1];
-    }
-  }
-
-  // return what the heap pointer should be after this allocation
-  return new_heap + total_machine_size;
 }
 
 int main(int argc, char **argv)

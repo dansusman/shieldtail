@@ -9,3 +9,5 @@
     -- concatenation makes a copy of the original strings, smashing them together
 
 -   Highlight bit pattern details (LSB of arity for xyz reasons)
+
+-   We support string at index access with the syntax "hello"[1] -> "e" because we're treating strings and tuples similarly in many ways, and we thought it'd be grating to have an alternative syntax for getting the character at a given index

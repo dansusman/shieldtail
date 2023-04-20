@@ -7,10 +7,10 @@ open Errors
 open Graph
 module StringSet = Set.Make (String)
 
-let c_global_function_names = ["input"; "print"; "equal"; "error"; "print_stack"]
+let c_global_function_names = ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"]
 
 let c_global_function_arities =
-  [("input", 0); ("print", 1); ("equal", 2); ("error", 2); ("print_stack", 1)]
+  [("input", 0); ("print", 1); ("equal", 2); ("error", 2); ("print_stack", 1); ("len", 1); ("chr", 1); ("ord", 1)]
 ;;
 
 type 'a name_envt = (string * 'a) list
@@ -122,10 +122,11 @@ let initial_val_env = []
 
 let prim_bindings = []
 
-let native_fun_bindings = [("equal", 2); ("input", 0)]
+let native_fun_bindings = [("equal", 2); ("input", 0); ("len", 1); ("chr", 1); ("ord", 1)]
 
 let initial_fun_env =
-  prim_bindings @ [("equal", (dummy_span, Some 2, Some 2)); ("input", (dummy_span, Some 0, Some 0))]
+  prim_bindings
+  @ List.map (fun (name, arity) -> (name, (dummy_span, Some arity, Some arity))) native_fun_bindings
 ;;
 
 (* You may find some of these helpers useful *)
@@ -1543,22 +1544,31 @@ and compile_cexpr
           IAdd (Reg heap_reg, Const (Int64.of_int total_size)) ]
       in
       reserve total_size tag @ store_length @ arg_moves @ create_tup_val
-  | CGetItem (tup, idx, _) ->
+  | CGetItem (tup, idx, (_, tag)) ->
       let c_tup = compile_imm tup env lambda_tag in
       let c_idx = compile_imm idx env lambda_tag in
+      let not_string_label = sprintf "not_string_%d" tag in
+      let access_done_label = sprintf "access_done_%d" tag in
       check_nil c_tup
       @ check_tup_tag c_tup "?err_get_not_tuple"
-      @ [ ILineComment "---- check not string ----";
+      @ check_num_tag c_idx "?err_get_not_num"
+      @ [ ILineComment "---- check string case ----";
           IMov (Reg scratch_reg, c_tup);
           ISub (Reg scratch_reg, Const tuple_tag);
           IMov (Reg RAX, Sized (QWORD_PTR, RegOffset (0, scratch_reg)));
           IAnd (Reg RAX, Const 1L);
           IMov (Reg scratch_reg, c_tup);
           ICmp (Reg RAX, Const 0L);
-          IJne (Label "?err_get_not_tuple");
-          ILineComment "-------------------------" ]
-      @ check_num_tag c_idx "?err_get_not_num"
-      @ [ IMov (Reg RAX, c_tup);
+          IJe (Label not_string_label) ]
+      @ native_call (Label "?charAt") [c_tup; c_idx; Reg heap_reg; Reg RBP; Reg RSP]
+      @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
+          IMov (Reg RAX, Reg heap_reg);
+          IOr (Reg RAX, Const tuple_tag);
+          IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer");
+          IJmp (Label access_done_label);
+          ILineComment "------------------------";
+          ILabel not_string_label;
+          IMov (Reg RAX, c_tup);
           ISub (Reg RAX, Const tuple_tag);
           IMov (Reg scratch_reg, c_idx);
           ICmp (Reg scratch_reg, Const 0L);
@@ -1566,7 +1576,8 @@ and compile_cexpr
           ICmp (Reg scratch_reg, RegOffset (0, RAX));
           IJge (Label "?err_get_high_index");
           ISar (Reg scratch_reg, Const 1L);
-          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, word_size)) ]
+          IMov (Reg RAX, RegOffsetReg (RAX, scratch_reg, word_size, word_size));
+          ILabel access_done_label ]
   | CSetItem (tup, idx, value, _) ->
       let c_tup = compile_imm tup env lambda_tag in
       let c_idx = compile_imm idx env lambda_tag in
@@ -1800,6 +1811,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern ?HEAP_END\n\
      extern ?set_stack_bottom\n\
      extern ?concat\n\
+     extern len\n\
+     extern ?charAt\n\
+     extern chr\n\
+     extern ord\n\
      global ?our_code_starts_here"
   in
   let suffix =

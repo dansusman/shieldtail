@@ -1,5 +1,5 @@
 (library
-  (name racer_impl)
+  (name shield_tailed_impl)
   (modules assembly compile errors exprs phases pretty runner lexer parser graph)
   (libraries ounit2 extlib unix)
   (wrapped false))
@@ -10,12 +10,12 @@
 (executable
   (name main)
   (modules main)
-  (libraries racer_impl))
+  (libraries shield_tailed_impl))
 
 (test
   (name test)
   (modules test)
-  (libraries racer_impl))
+  (libraries shield_tailed_impl))
 
 (env (dev (flags (:standard -warn-error -A))))
 

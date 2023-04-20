@@ -4,7 +4,7 @@
         -- multi-line strings?
 -   [x] EString, ImmString
 -   [x] Allocation
--   [ ] GC: need to sweep strings (copy/paste tuple case again?)
+-   [x] GC: need to sweep strings (copy/paste tuple case again?)
 -   [x] Char doesn't need a whole word
 -   [ ] Build out a string library
 -   [ ] toString
@@ -13,10 +13,11 @@
 -   [x] Concatenation
         -- str1 ^ str2
 -   [ ] String comparison
--   [ ] charToOrd, ordToChar
+-   [ ] charToInt, intToChar | chr, ord
 -   [ ] test a bunch of random special characters via ascii code and direct usage
--   [ ] Add entry to DECISIONS.md for not supporting "alksdjfkls"[3] but instead (charAt "alsdkjfk" 54) or something
+-   [x] get at index for strings
 -   [ ] Add natives? for strings
+-   [ ] write substantial documentation
 
 ## Compilation
 
@@ -26,6 +27,12 @@
 -   [x] Tuple indexing and other existing things must not accept strings
 -   [ ] Tag error checks for prim ops
         -- concatenation needs to check for string tag for left and right
+
+# Implement the functionality to demo
+- [ ] Caesar cipher (input, string get at index, len, ord, chr, concat)
+- [ ] Pig Latin (input, slicing, len, concat, split)
+- [ ] Sort a list of strings (input, comparison, split)
+- [ ] reverse a string [::-1] (input, slicing)
 
 # Dicts
 

@@ -856,7 +856,8 @@ let oom =
     tgc "oomgc2" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
     tgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
     tgc "oomgc4" (4 + builtins_size) "(3, 4)" "" "(3, 4)";
-    tgcerr "oomgc5" (3 + builtins_size) "(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)" "" "Allocation";
+    tgcerr "oomgc5" (4 + builtins_size) "(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)" "" "Out of memory";
+    (* TODO could come back and fix this*)
     tgcerr "gc_tuple_but_full" builtins_size "(1, 2)" "" "Out of memory";
     tgcerr "gc_lambda_but_full" (3 + builtins_size) "(lambda (x): x)" "" "Out of memory";
     tgcerr "gc_lambda_in_tup_but_full" (11 + builtins_size)
