@@ -6,18 +6,19 @@
 -   [x] Allocation
 -   [x] GC: need to sweep strings (copy/paste tuple case again?)
 -   [x] Char doesn't need a whole word
--   [ ] Build out a string library
--   [ ] toString
--   [ ] split/slicing?
--   [ ] Cast chars to strings
+-   [x] get at index for strings
 -   [x] Concatenation
         -- str1 ^ str2
--   [ ] String comparison
--   [ ] charToInt, intToChar | chr, ord
--   [ ] test a bunch of random special characters via ascii code and direct usage
--   [x] get at index for strings
--   [ ] Add natives? for strings
+-   [x] charToInt, intToChar | chr, ord
+-   [x] String equality
+-   [ ] split/slicing?
+-   [ ] toString
+-   [ ] Build out a string library
+-   [ ] String >, <, etc.?
+-   [ ] support strings as input?
+        -- write down any input() decisions/make examples to show old stuff still works
 -   [ ] write substantial documentation
+-   [ ] test a bunch of random special characters via ascii code and direct usage
 
 ## Compilation
 
@@ -29,10 +30,11 @@
         -- concatenation needs to check for string tag for left and right
 
 # Implement the functionality to demo
-- [ ] Caesar cipher (input, string get at index, len, ord, chr, concat)
-- [ ] Pig Latin (input, slicing, len, concat, split)
-- [ ] Sort a list of strings (input, comparison, split)
-- [ ] reverse a string [::-1] (input, slicing)
+
+-   [x] Caesar cipher (input, string get at index, len, ord, chr, concat)
+-   [ ] Pig Latin (input, slicing, len, concat, split)
+-   [ ] Sort a list of strings (input, comparison, split)
+-   [ ] reverse a string [::-1] (input, slicing)
 
 # Dicts
 
@@ -56,6 +58,7 @@
 
 # Other Ideas
 
+-   [ ] Support strings as input
 -   [ ] Decouple tuple and string logic?
 -   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)
 -   [ ] f strings? (if it's just a desugaring or

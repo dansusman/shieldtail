@@ -99,6 +99,9 @@ and string_of_expr_with (depth : int) (print_a : 'a -> string) (e : 'a expr) : s
     | ESeq (e1, e2, _) -> string_of_expr e1 ^ "; " ^ string_of_expr e2
     | ETuple ([e], a) -> "(" ^ string_of_expr e ^ ",)" ^ print_a a
     | ETuple (exprs, _) -> "(" ^ ExtString.String.join ", " (List.map string_of_expr exprs) ^ ")"
+    | ESlice (str, s, e, step, a) ->
+        sprintf "%s[%s:%s:%s]%s" (string_of_expr str) (string_of_expr s) (string_of_expr e)
+          (string_of_expr step) (print_a a)
     | EGetItem (e, idx, a) -> sprintf "%s[%s]%s" (string_of_expr e) (string_of_expr idx) (print_a a)
     | ESetItem (e, idx, newval, a) ->
         sprintf "%s[%s] := %s %s" (string_of_expr e) (string_of_expr idx) (string_of_expr newval)
@@ -196,6 +199,9 @@ and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) :
     match c with
     | CTuple (imms, a) ->
         sprintf "(%s)%s" (ExtString.String.join ", " (List.map string_of_immexpr imms)) (print_a a)
+    | CSlice (str, s, e, step, a) ->
+        sprintf "%s[%s:%s:%s]%s" (string_of_immexpr str) (string_of_immexpr s) (string_of_immexpr e)
+          (string_of_immexpr step) (print_a a)
     | CGetItem (e, idx, a) ->
         sprintf "%s[%s]%s" (string_of_immexpr e) (string_of_immexpr idx) (print_a a)
     | CSetItem (e, idx, newval, a) ->
@@ -216,7 +222,7 @@ and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) :
         sprintf "(lam(%s) %s)%s" (ExtString.String.join ", " args) (string_of_aexpr body)
           (print_a a)
     | CImmExpr i -> string_of_immexpr i
-  | CString (s, a) -> s ^ print_a a
+    | CString (s, a) -> s ^ print_a a
 
 and string_of_immexpr_with (print_a : 'a -> string) (i : 'a immexpr) : string =
   match i with
@@ -314,6 +320,16 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
   | ETuple (es, a) ->
       open_label fmt "ETuple" (print_a a);
       print_list fmt (fun fmt -> format_expr fmt print_a) es print_comma_sep;
+      close_paren fmt
+  | ESlice (str, s, e, step, a) ->
+      open_label fmt "ESlice" (print_a a);
+      help str;
+      print_comma_sep fmt;
+      help s;
+      pp_print_string fmt ":";
+      help e;
+      pp_print_string fmt ":";
+      help step;
       close_paren fmt
   | EGetItem (e, idx, a) ->
       open_label fmt "EGetItem" (print_a a);

@@ -1,0 +1,19 @@
+def shift_char(character, shift_by):
+    if !(equal(character, " ")) && !(equal(character, ",")):
+        chr(ord(character) + shift_by)
+    else:
+        character
+
+def caesar_shift_help(string, shift, acc, idx):
+    if len(string) == idx: 
+        acc
+    else: 
+        caesar_shift_help(string, shift, acc ^ shift_char(string[idx], shift), idx + 1)
+
+def caesar_shift(string, shift):
+    caesar_shift_help(string, shift, "", 0)
+    
+let string = "Et tu, Brute" in
+let k = 5 in
+caesar_shift(string, k)
+

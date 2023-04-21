@@ -13,3 +13,4 @@
 -   intToString, boolToString, and vice versa
 -   split
 -   string slicing (like Python)
+-   isLowercase, isUppercase (chars)

@@ -97,6 +97,16 @@ let err_CONCAT_NOT_SEQ = 19L
 
 let err_CONCAT_NOT_SAME = 20L
 
+let err_LENGTH_NOT_SEQ = 21L
+
+let err_ORD_NOT_CHAR = 22L
+
+let err_CHR_NOT_NUM = 23L
+
+let err_SLICE_NOT_SEQ = 24L
+
+let err_SLICE_NOT_NUM = 25L
+
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -230,6 +240,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
     | EString _ -> []
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
+    | ESlice (str, s, en, step, _) -> wf_E str env @ wf_E s env @ wf_E en env @ wf_E step env
     | EGetItem (e, idx, _) -> wf_E e env @ wf_E idx env
     | ESetItem (e, idx, newval, _) -> wf_E e env @ wf_E idx env @ wf_E newval env
     | ENil _ -> []
@@ -536,6 +547,7 @@ let desugar (p : sourcespan program) : sourcespan program =
     | EString (str, tag) -> EString (str, tag)
     | ESeq (e1, e2, tag) -> ELet ([(BBlank tag, helpE e1, tag)], helpE e2, tag)
     | ETuple (exprs, tag) -> ETuple (List.map helpE exprs, tag)
+    | ESlice (str, s, en, step, tag) -> ESlice (helpE str, helpE s, helpE en, helpE step, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE e, helpE idx, tag)
     | ESetItem (e, idx, newval, tag) -> ESetItem (helpE e, helpE idx, helpE newval, tag)
     | EId (x, tag) -> EId (x, tag)
@@ -605,6 +617,7 @@ let rec deepest_stack e env =
         let new_env = List.mapi (fun i a -> (a, RegOffset (word_size * (i + 3), RBP))) args @ env in
         deepest_stack body new_env
     | CString _ -> 0
+    | CSlice (str, _, _, _, _) -> helpI str
     | CImmExpr i -> helpI i
   and helpI i =
     match i with
@@ -661,6 +674,8 @@ let rename_and_tag (p : tag program) : tag program =
     match e with
     | ESeq (e1, e2, tag) -> ESeq (helpE env e1, helpE env e2, tag)
     | ETuple (es, tag) -> ETuple (List.map (helpE env) es, tag)
+    | ESlice (str, s, en, step, tag) ->
+        ESlice (helpE env str, helpE env s, helpE env en, helpE env step, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE env e, helpE env idx, tag)
     | ESetItem (e, idx, newval, tag) -> ESetItem (helpE env e, helpE env idx, helpE env newval, tag)
     | EPrim1 (op, arg, tag) -> EPrim1 (op, helpE env arg, tag)
@@ -806,6 +821,15 @@ let anf (p : tag program) : unit aprogram =
     | EString (str, tag) ->
         let tmp = sprintf "str_%d" tag in
         (ImmId (tmp, ()), [BLet (tmp, CString (str, ()))])
+    | ESlice (str, s, en, step, tag) ->
+        let tmp = sprintf "slice_%d" tag in
+        let str_imm, str_setup = helpI str in
+        let s_imm, s_setup = helpI s in
+        let e_imm, e_setup = helpI en in
+        let step_imm, step_setup = helpI step in
+        ( ImmId (tmp, ()),
+          str_setup @ s_setup @ e_setup @ step_setup
+          @ [BLet (tmp, CSlice (str_imm, s_imm, e_imm, step_imm, ()))] )
     | EGetItem (tup, idx, tag) ->
         let tmp = sprintf "get_%d" tag in
         let tup_imm, tup_setup = helpI tup in
@@ -919,6 +943,12 @@ let free_vars (e : 'a aexpr) : StringSet.t =
         let args_free = free_vars_I_list args bound in
         StringSet.union func_free args_free
     | CTuple (els, _) -> free_vars_I_list els bound
+    | CSlice (str, s, en, step, _) ->
+        let str_free = free_vars_I str bound in
+        let s_free = free_vars_I s bound in
+        let e_free = free_vars_I en bound in
+        let step_free = free_vars_I step bound in
+        StringSet.union (StringSet.union (StringSet.union str_free s_free) e_free) step_free
     | CGetItem (tup, idx, _) ->
         let tup_free = free_vars_I tup bound in
         let idx_free = free_vars_I idx bound in
@@ -976,6 +1006,7 @@ let get_fv_info (e : 'a aexpr) : StringSet.t =
      |CApp (_, _, _, (fvs, _))
      |CTuple (_, (fvs, _))
      |CString (_, (fvs, _))
+     |CSlice (_, _, _, _, (fvs, _))
      |CGetItem (_, _, (fvs, _))
      |CSetItem (_, _, _, (fvs, _)) -> fvs
     | CImmExpr i -> (
@@ -1003,6 +1034,12 @@ let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
       let args_free = List.map free_vars_I args in
       CApp (func_free, args_free, ct, (free_vars (ACExpr e), tag))
   | CTuple (els, tag) -> CTuple (List.map free_vars_I els, (free_vars (ACExpr e), tag))
+  | CSlice (str, s, en, step, tag) ->
+      let str_free = free_vars_I str in
+      let s_free = free_vars_I s in
+      let e_free = free_vars_I en in
+      let step_free = free_vars_I step in
+      CSlice (str_free, s_free, e_free, step_free, (free_vars (ACExpr e), tag))
   | CGetItem (tup, idx, tag) ->
       let tup_free = free_vars_I tup in
       let idx_free = free_vars_I idx in
@@ -1505,6 +1542,20 @@ and compile_cexpr
       @ c_thn
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
+  | CSlice (str, s, en, step, _) ->
+      let c_str = compile_imm str env lambda_tag in
+      let c_s = compile_imm s env lambda_tag in
+      let c_e = compile_imm en env lambda_tag in
+      let c_step = compile_imm step env lambda_tag in
+      check_tup_tag c_str "?err_slice_not_seq"
+      @ check_num_tag c_s "?err_slice_not_num"
+      @ check_num_tag c_e "?err_slice_not_num"
+      @ check_num_tag c_step "?err_slice_not_num"
+      @ native_call (Label "?slice") [c_str; c_s; c_e; c_step; Reg heap_reg; Reg RBP; Reg RSP]
+      @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
+          IMov (Reg RAX, Reg heap_reg);
+          IOr (Reg RAX, Const tuple_tag);
+          IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
   | CString (s, (_, tag)) ->
       let length = String.length s in
       (* element count + (# letters)  *)
@@ -1738,17 +1789,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-    else [] )
+      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+      else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-    then []
-    else
-      [ IInstrComment
-          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-            sprintf "Popping %d arguments" num_stack_args ) ] )
+      then []
+      else
+        [ IInstrComment
+            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+              sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
@@ -1830,6 +1881,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern ?charAt\n\
      extern chr\n\
      extern ord\n\
+     extern ?slice\n\
      global ?our_code_starts_here"
   in
   let suffix =
@@ -1853,7 +1905,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_get_not_num:%s\n\
        ?err_set_not_num:%s\n\
        ?err_tuple_destructure_mismatch:%s\n\
-       ?err_concat_not_seq:%s\n"
+       ?err_concat_not_seq:%s\n\
+       ?err_slice_not_seq:%s\n\n\
+      \       ?err_slice_not_num:%s\n\n\
+      \       "
       (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
@@ -1874,6 +1929,8 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm
          (native_call (Label "?error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
       (to_asm (native_call (Label "?error") [Const err_CONCAT_NOT_SEQ; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_SEQ; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_NUM; Reg scratch_reg]))
   in
   match anfed with
   | AProgram (body, (_, tag)) ->

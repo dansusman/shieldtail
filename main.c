@@ -59,6 +59,8 @@ const uint64_t ERR_CONCAT_NOT_SAME = 20;
 const uint64_t ERR_LENGTH_NOT_SEQ = 21;
 const uint64_t ERR_ORD_NOT_CHAR = 22;
 const uint64_t ERR_CHR_NOT_NUM = 23;
+const uint64_t ERR_SLICE_NOT_SEQ = 24;
+const uint64_t ERR_SLICE_NOT_NUM = 25;
 
 size_t HEAP_SIZE;
 uint64_t *STACK_BOTTOM;
@@ -94,6 +96,27 @@ SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2)
     {
       return BOOL_FALSE;
     }
+
+    bool tup1_is_string = (tup1[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+    bool tup2_is_string = (tup2[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+
+    if (tup1_is_string != tup2_is_string)
+    {
+      return BOOL_FALSE;
+    }
+
+    if (tup1_is_string)
+    {
+      for (uint64_t i = 1; i <= tup1[0] / 16 + 1; i++)
+      {
+        if (tup1[i] != tup2[i])
+        {
+          return BOOL_FALSE;
+        }
+      }
+      return BOOL_TRUE;
+    }
+
     for (uint64_t i = 1; i <= tup1[0] / 2; i++)
     {
       if (equal(tup1[i], tup2[i]) == BOOL_FALSE)
@@ -394,6 +417,14 @@ void error(uint64_t code, SNAKEVAL val)
     break;
   case ERR_CHR_NOT_NUM:
     fprintf(stderr, "Error: chr expected a number <= 255 and >= 0, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_SLICE_NOT_SEQ:
+    fprintf(stderr, "Error: slicing expected a tuple or a string, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_SLICE_NOT_NUM:
+    fprintf(stderr, "Error: slicing expected a number, but got ");
     printHelp(stderr, val);
     break;
   default:

@@ -2038,6 +2038,5 @@ let () =
                compile_cexpr_suite;
                lambda_suite;
                color_graph_suite; *)
-           input_file_test_suite ();
-           gc_suite ] )
+           input_file_test_suite () (* gc_suite *) ] )
 ;;

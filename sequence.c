@@ -216,3 +216,70 @@ uint64_t charToInt(SNAKEVAL chr_val)
 
   return chr[1] * 2;
 }
+
+uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, SNAKEVAL step_val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
+{
+  uint64_t *seq = (uint64_t *)(seq_val - TUPLE_TAG);
+  bool is_string = (seq[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+  uint64_t size1;
+
+  if (is_string)
+  {
+    // take off the tag, we just want the machine size
+    size1 = (seq[0] - STRING_HEAP_TAG) / 2;
+  }
+  else
+  {
+    size1 = seq[0] / 2;
+  }
+
+  char buffer[size1];
+
+  uint64_t start_idx = start_idx_val / 2;
+  uint64_t end_idx = end_idx_val / 2;
+  uint64_t step = step_val / 2;
+
+  uint64_t length_of_result = (end_idx - start_idx) / step >= 0 ? (end_idx - start_idx) / step : 0;
+
+  uint64_t total_machine_size = 1 + (is_string ? letters_to_words(length_of_result) : length_of_result);
+  total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+
+  uint64_t *new_heap = alloc_ptr;
+
+  // do GC and get a new heap pointer if needed
+  if (HEAP_END - alloc_ptr < total_machine_size)
+  {
+    new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
+  }
+
+  // store the new combined size
+  new_heap[0] = (length_of_result * 2) + (is_string ? STRING_HEAP_TAG : 0);
+
+  if (is_string)
+  {
+    char *seq1_char = (char *)seq;
+    char *new_str = (char *)new_heap;
+    int j = 8;
+    // copy in all of the elements from the first heap sequence
+    for (int i = 8 + start_idx; i < end_idx + 8; i += step)
+    {
+      // strings store multiple chars in one word so we need to account for different heap addresses
+      if (i - 8 < size1 && i - 8 >= 0)
+      {
+        new_str[j] = seq1_char[i];
+        j++;
+      }
+    }
+  }
+  else
+  {
+    // copy in all of the elements from the first heap sequence
+    for (int i = start_idx; i < end_idx; i += step)
+    {
+      new_heap[i + 1] = seq[i + 1];
+    }
+  }
+
+  // return what the heap pointer should be after this allocation
+  return new_heap + total_machine_size;
+}
