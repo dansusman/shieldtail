@@ -240,7 +240,13 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
     | EString _ -> []
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
-    | ESlice (str, s, en, step, _) -> wf_E str env @ wf_E s env @ wf_E en env @ wf_E step env
+    | ESlice (str, s, en, step, _) ->
+        let wf_slice e =
+          match e with
+          | Some x -> wf_E x env
+          | None -> []
+        in
+        wf_E str env @ wf_slice s @ wf_slice en @ wf_slice step
     | EGetItem (e, idx, _) -> wf_E e env @ wf_E idx env
     | ESetItem (e, idx, newval, _) -> wf_E e env @ wf_E idx env @ wf_E newval env
     | ENil _ -> []
@@ -547,7 +553,8 @@ let desugar (p : sourcespan program) : sourcespan program =
     | EString (str, tag) -> EString (str, tag)
     | ESeq (e1, e2, tag) -> ELet ([(BBlank tag, helpE e1, tag)], helpE e2, tag)
     | ETuple (exprs, tag) -> ETuple (List.map helpE exprs, tag)
-    | ESlice (str, s, en, step, tag) -> ESlice (helpE str, helpE s, helpE en, helpE step, tag)
+    | ESlice (str, s, en, step, tag) ->
+        ESlice (helpE str, Option.map helpE s, Option.map helpE en, Option.map helpE step, tag)
     | EGetItem (e, idx, tag) -> EGetItem (helpE e, helpE idx, tag)
     | ESetItem (e, idx, newval, tag) -> ESetItem (helpE e, helpE idx, helpE newval, tag)
     | EId (x, tag) -> EId (x, tag)
@@ -675,7 +682,12 @@ let rename_and_tag (p : tag program) : tag program =
     | ESeq (e1, e2, tag) -> ESeq (helpE env e1, helpE env e2, tag)
     | ETuple (es, tag) -> ETuple (List.map (helpE env) es, tag)
     | ESlice (str, s, en, step, tag) ->
-        ESlice (helpE env str, helpE env s, helpE env en, helpE env step, tag)
+        ESlice
+          ( helpE env str,
+            Option.map (helpE env) s,
+            Option.map (helpE env) en,
+            Option.map (helpE env) step,
+            tag )
     | EGetItem (e, idx, tag) -> EGetItem (helpE env e, helpE env idx, tag)
     | ESetItem (e, idx, newval, tag) -> ESetItem (helpE env e, helpE env idx, helpE env newval, tag)
     | EPrim1 (op, arg, tag) -> EPrim1 (op, helpE env arg, tag)
@@ -822,11 +834,18 @@ let anf (p : tag program) : unit aprogram =
         let tmp = sprintf "str_%d" tag in
         (ImmId (tmp, ()), [BLet (tmp, CString (str, ()))])
     | ESlice (str, s, en, step, tag) ->
+        let help_slice e =
+          match e with
+          | Some x ->
+              let e_imm, e_setup = helpI x in
+              (Some e_imm, e_setup)
+          | None -> (None, [])
+        in
         let tmp = sprintf "slice_%d" tag in
         let str_imm, str_setup = helpI str in
-        let s_imm, s_setup = helpI s in
-        let e_imm, e_setup = helpI en in
-        let step_imm, step_setup = helpI step in
+        let s_imm, s_setup = help_slice s in
+        let e_imm, e_setup = help_slice en in
+        let step_imm, step_setup = help_slice step in
         ( ImmId (tmp, ()),
           str_setup @ s_setup @ e_setup @ step_setup
           @ [BLet (tmp, CSlice (str_imm, s_imm, e_imm, step_imm, ()))] )
@@ -944,6 +963,7 @@ let free_vars (e : 'a aexpr) : StringSet.t =
         StringSet.union func_free args_free
     | CTuple (els, _) -> free_vars_I_list els bound
     | CSlice (str, s, en, step, _) ->
+      (* TODO continue fixing compilation errors for options here *)
         let str_free = free_vars_I str bound in
         let s_free = free_vars_I s bound in
         let e_free = free_vars_I en bound in
@@ -1789,17 +1809,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-      else [] )
+    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+    else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-      then []
-      else
-        [ IInstrComment
-            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-              sprintf "Popping %d arguments" num_stack_args ) ] )
+    then []
+    else
+      [ IInstrComment
+          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+            sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]

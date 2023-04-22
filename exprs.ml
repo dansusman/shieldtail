@@ -50,7 +50,8 @@ and call_type =
 and 'a expr =
   | ESeq of 'a expr * 'a expr * 'a
   | ETuple of 'a expr list * 'a
-  | ESlice of 'a expr * 'a expr * 'a expr * 'a expr * 'a (* string[start:end:step] *)
+  | ESlice of
+      'a expr * 'a expr option * 'a expr option * 'a expr option * 'a (* string[start:end:step] *)
   | EGetItem of 'a expr * 'a expr * 'a
   | ESetItem of 'a expr * 'a expr * 'a expr * 'a
   | ELet of 'a binding list * 'a expr * 'a
@@ -89,7 +90,7 @@ and 'a cexpr =
   | CSetItem of 'a immexpr * 'a immexpr * 'a immexpr * 'a
   | CLambda of string list * 'a aexpr * 'a
   | CString of string * 'a
-  | CSlice of 'a immexpr * 'a immexpr * 'a immexpr * 'a immexpr * 'a
+  | CSlice of 'a immexpr * 'a immexpr option * 'a immexpr option * 'a immexpr option * 'a
 
 and 'a aexpr =
   (* anf expressions *)
@@ -142,7 +143,12 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   | ESeq (e1, e2, a) -> ESeq (map_tag_E f e1, map_tag_E f e2, f a)
   | ETuple (exprs, a) -> ETuple (List.map (map_tag_E f) exprs, f a)
   | ESlice (str, s, e, step, a) ->
-      ESlice (map_tag_E f str, map_tag_E f s, map_tag_E f e, map_tag_E f step, f a)
+      ESlice
+        ( map_tag_E f str,
+          Option.map (map_tag_E f) s,
+          Option.map (map_tag_E f) e,
+          Option.map (map_tag_E f) step,
+          f a )
   | EGetItem (e, idx, a) -> EGetItem (map_tag_E f e, map_tag_E f idx, f a)
   | ESetItem (e, idx, newval, a) ->
       ESetItem (map_tag_E f e, map_tag_E f idx, map_tag_E f newval, f a)
@@ -256,7 +262,8 @@ and untagE e =
   | EString (str, _) -> EString (str, ())
   | ESeq (e1, e2, _) -> ESeq (untagE e1, untagE e2, ())
   | ETuple (exprs, _) -> ETuple (List.map untagE exprs, ())
-  | ESlice (str, s, e, step, _) -> ESlice (untagE str, untagE s, untagE e, untagE step, ())
+  | ESlice (str, s, e, step, _) ->
+      ESlice (untagE str, Option.map untagE s, Option.map untagE e, Option.map untagE step, ())
   | EGetItem (e, idx, _) -> EGetItem (untagE e, untagE idx, ())
   | ESetItem (e, idx, newval, _) -> ESetItem (untagE e, untagE idx, untagE newval, ())
   | EId (x, _) -> EId (x, ())
@@ -323,7 +330,7 @@ let atag (p : 'a aprogram) : tag aprogram =
         CTuple (List.map helpI es, tup_tag)
     | CSlice (str, s, e, step, _) ->
         let set_tag = tag () in
-        CSlice (helpI str, helpI s, helpI e, helpI step, set_tag)
+        CSlice (helpI str, Option.map helpI s, Option.map helpI e, Option.map helpI step, set_tag)
     | CGetItem (e, idx, _) ->
         let get_tag = tag () in
         CGetItem (helpI e, helpI idx, get_tag)
@@ -370,7 +377,7 @@ let rec fvs_to_list (prog : (StringSet.t * tag) aprogram) : (string list * tag) 
         CApp (helpI f, List.map helpI args, call_type, (StringSet.elements fvs, tag))
     | CTuple (elems, (fvs, tag)) -> CTuple (List.map helpI elems, (StringSet.elements fvs, tag))
     | CSlice (str, s, e, step, (fvs, tag)) ->
-        CSlice (helpI str, helpI s, helpI e, helpI step, (StringSet.elements fvs, tag))
+        CSlice (helpI str, Option.map helpI s, Option.map helpI e, Option.map helpI step, (StringSet.elements fvs, tag))
     | CGetItem (t, i, (fvs, tag)) -> CGetItem (helpI t, helpI i, (StringSet.elements fvs, tag))
     | CSetItem (t, i, e, (fvs, tag)) ->
         CSetItem (helpI t, helpI i, helpI e, (StringSet.elements fvs, tag))
