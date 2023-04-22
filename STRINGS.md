@@ -2,15 +2,17 @@
 -   string comparison
 -   substrings
 -   charAt
--   toLowercase
--   toUppercase
+-   toLowercase, isLowercase
+-   toUppercase, isUppercase
 -   contains
 -   equals
 -   equalsIgnoreCase
--   format
+-   format - this is potentially desugaring?
 -   indexOf
--   conversion between tuples and strings
--   intToString, boolToString, and vice versa
+-   conversion between tuples and strings - perhaps more efficient if in runtime
 -   split
 -   string slicing (like Python)
--   isLowercase, isUppercase (chars)
+  
+-   toString, and vice versa - to implement in runtime
+-   input?
+

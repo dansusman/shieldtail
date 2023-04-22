@@ -61,6 +61,7 @@ const uint64_t ERR_ORD_NOT_CHAR = 22;
 const uint64_t ERR_CHR_NOT_NUM = 23;
 const uint64_t ERR_SLICE_NOT_SEQ = 24;
 const uint64_t ERR_SLICE_NOT_NUM = 25;
+const uint64_t ERR_NUM_TO_STRING_NOT_NUM = 26;
 
 size_t HEAP_SIZE;
 uint64_t *STACK_BOTTOM;
@@ -186,9 +187,40 @@ void printHelp(FILE *out, SNAKEVAL val)
       char *str_addr = (char *)addr;
       for (uint64_t i = 8; i < len + 8; i++)
       {
-
-        // fprintf(out, "%ld\n", (str_addr[i]));
-        fprintf(out, "%c", (char)(str_addr[i]));
+        if (str_addr[i] == '\\')
+        {
+          // if there wasn't a character after the slash, the program wouldn't have parsed.
+          switch (str_addr[i + 1])
+          {
+          case 'n':
+            fprintf(out, "\n");
+            break;
+          case 't':
+            fprintf(out, "\t");
+            break;
+          case 'b':
+            fprintf(out, "\b");
+            break;
+          case 'r':
+            fprintf(out, "\r");
+            break;
+          case '"':
+            fprintf(out, "\"");
+            break;
+          case '\\':
+            fprintf(out, "\\");
+            break;
+          default:
+            //????
+            fprintf(out, "unknown");
+            break;
+          }
+          i++;
+        }
+        else
+        {
+          fprintf(out, "%c", (char)(str_addr[i]));
+        }
       }
       fprintf(out, "\"");
       // Unmark this tuple: restore its length
@@ -425,6 +457,10 @@ void error(uint64_t code, SNAKEVAL val)
     break;
   case ERR_SLICE_NOT_NUM:
     fprintf(stderr, "Error: slicing expected numbers (with step != 0), but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_NUM_TO_STRING_NOT_NUM:
+    fprintf(stderr, "Error: numToString expected a number, but got ");
     printHelp(stderr, val);
     break;
   default:

@@ -57,7 +57,9 @@ rule token = parse
   | "true" { TRUE }
   | "false" { FALSE }
   | "chr" { CHR }
+  | "numToString" { NUMTOSTRING }
   | "istuple" { ISTUPLE }
+  | "isstring" { ISSTRING }
   | "isbool" { ISBOOL }
   | "isnum" { ISNUM }
   | "add1" { ADD1 }

@@ -16,5 +16,6 @@ uint64_t charAt(SNAKEVAL str_val, SNAKEVAL idx_val, uint64_t *alloc_ptr, uint64_
 uint64_t intToChar(SNAKEVAL num, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("chr");
 uint64_t charToInt(SNAKEVAL chr) asm("ord");
 uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, bool start_default, SNAKEVAL end_idx_val, bool end_default, SNAKEVAL step_val, bool step_default, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?slice");
+uint64_t numToString(SNAKEVAL val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("numToString");
 
 #endif

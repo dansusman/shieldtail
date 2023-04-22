@@ -8,7 +8,7 @@ open Graph
 module StringSet = Set.Make (String)
 
 let c_global_function_names =
-  ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"]
+  ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"; "numToString"]
 ;;
 
 let c_global_function_arities =
@@ -19,7 +19,8 @@ let c_global_function_arities =
     ("print_stack", 1);
     ("len", 1);
     ("chr", 1);
-    ("ord", 1) ]
+    ("ord", 1);
+    ("numToString", 1) ]
 ;;
 
 type 'a name_envt = (string * 'a) list
@@ -107,6 +108,8 @@ let err_SLICE_NOT_SEQ = 24L
 
 let err_SLICE_NOT_NUM = 25L
 
+let err_NUM_TO_STRING_NOT_NUM = 26L
+
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -141,7 +144,9 @@ let initial_val_env = []
 
 let prim_bindings = []
 
-let native_fun_bindings = [("equal", 2); ("input", 0); ("len", 1); ("chr", 1); ("ord", 1)]
+let native_fun_bindings =
+  [("equal", 2); ("input", 0); ("len", 1); ("chr", 1); ("ord", 1); ("numToString", 1)]
+;;
 
 let initial_fun_env =
   prim_bindings
@@ -1437,6 +1442,19 @@ and compile_cexpr
           (* Compare result to num/bool tag *)
           ICmp (Reg RAX, Const tag);
           (* Preload true into RAX *)
+          IMov (Reg RAX, const_false);
+          (* If matches the tag, jump over next instruction *)
+          IJne (Label label);
+          (* Set RAX to false if we reach here, meaning isnum/bool false *)
+          IMov (Reg RAX, const_true); ]
+      in
+      let predicate_prim1_heap (label : string) (heap_tag : int64) : instruction list =
+        [ IMov (Reg RAX, e_reg);
+          ISub (Reg RAX, Const tuple_tag);
+          IMov (Reg RAX, RegOffset (0, RAX));
+          IAnd (Reg RAX, HexConst 1L);
+          ICmp (Reg RAX, Const heap_tag);
+          (* Preload true into RAX *)
           IMov (Reg RAX, const_true);
           (* If matches the tag, jump over next instruction *)
           IJe (Label label);
@@ -1455,15 +1473,30 @@ and compile_cexpr
           @ check_overflow
       | IsBool ->
           let is_bool_label = sprintf "is_bool_%d" tag in
-          predicate_prim1_instrs is_bool_label bool_tag_mask bool_tag
+          predicate_prim1_instrs is_bool_label bool_tag_mask bool_tag @ [ILabel is_bool_label]
       | IsNum ->
           let is_num_label = sprintf "is_num_%d" tag in
-          predicate_prim1_instrs is_num_label num_tag_mask num_tag
+          predicate_prim1_instrs is_num_label num_tag_mask num_tag @ [ILabel is_num_label]
       | IsTuple ->
+          let is_seq_label = sprintf "is_seq_%d" tag in
           let is_tup_label = sprintf "is_tup_%d" tag in
-          predicate_prim1_instrs is_tup_label tuple_tag_mask tuple_tag
+          predicate_prim1_instrs is_seq_label tuple_tag_mask tuple_tag
+          @ predicate_prim1_heap is_tup_label 0L
+          @ [ILabel is_seq_label]
+      | IsString ->
+          let is_seq_label = sprintf "is_seq_%d" tag in
+          let is_str_label = sprintf "is_str_%d" tag in
+          predicate_prim1_instrs is_seq_label tuple_tag_mask tuple_tag
+          @ predicate_prim1_heap is_str_label 1L
+          @ [ILabel is_seq_label]
       | Chr ->
           native_call (Label "chr") [e_reg; Reg heap_reg; Reg RBP; Reg RSP]
+          @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
+              IMov (Reg RAX, Reg heap_reg);
+              IOr (Reg RAX, Const tuple_tag);
+              IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
+      | NumToString ->
+          native_call (Label "numToString") [e_reg; Reg heap_reg; Reg RBP; Reg RSP]
           @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
               IMov (Reg RAX, Reg heap_reg);
               IOr (Reg RAX, Const tuple_tag);
@@ -1924,6 +1957,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern len\n\
      extern ?charAt\n\
      extern chr\n\
+     extern numToString\n\
      extern ord\n\
      extern ?slice\n\
      global ?our_code_starts_here"
@@ -1950,9 +1984,9 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_set_not_num:%s\n\
        ?err_tuple_destructure_mismatch:%s\n\
        ?err_concat_not_seq:%s\n\
-       ?err_slice_not_seq:%s\n\n\
-      \       ?err_slice_not_num:%s\n\n\
-      \       "
+       ?err_slice_not_seq:%s\n\
+       ?err_slice_not_num:%s\n\
+       ?err_num_to_string_not_num:%s\n"
       (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
@@ -1975,6 +2009,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm (native_call (Label "?error") [Const err_CONCAT_NOT_SEQ; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_SEQ; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_NUM_TO_STRING_NOT_NUM; Reg scratch_reg]))
   in
   match anfed with
   | AProgram (body, (_, tag)) ->

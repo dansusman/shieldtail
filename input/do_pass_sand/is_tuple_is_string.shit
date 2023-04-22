@@ -1,0 +1,4 @@
+print(istuple((1, 2)));
+print(isstring((1, 2)));
+print(istuple("hello"));
+isstring("hello")

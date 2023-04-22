@@ -1,0 +1,2 @@
+print(istuple(5));
+isstring(5)

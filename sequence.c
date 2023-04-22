@@ -37,6 +37,7 @@ extern uint64_t ERR_ORD_NOT_CHAR;
 extern uint64_t ERR_CHR_NOT_NUM;
 extern uint64_t ERR_SLICE_NOT_SEQ;
 extern uint64_t ERR_SLICE_NOT_NUM;
+extern uint64_t ERR_NUM_TO_STRING_NOT_NUM;
 
 extern uint64_t *HEAP_END asm("?HEAP_END");
 
@@ -324,6 +325,42 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, bool start_default, SNA
 
   // store the new combined size
   new_heap[0] = (length_of_result * 2) + (is_string ? STRING_HEAP_TAG : 0);
+
+  memcpy(&new_heap[1], buffer, total_machine_size * 8);
+  // return what the heap pointer should be after this allocation
+  return new_heap + total_machine_size;
+}
+
+uint64_t numToString(SNAKEVAL val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
+{
+  fprintf(stderr, "numToString: \n");
+  fprintf(stderr, "%ld\n", val);
+  char buffer[21]; // just enough room for 64-bit nums
+
+  if ((val & NUM_TAG_MASK) == NUM_TAG)
+  {
+    sprintf(buffer, "%ld", ((int64_t)val) >> 1); // deliberately int64, so that it's signed
+  }
+  else
+  {
+    error(ERR_NUM_TO_STRING_NOT_NUM, val);
+  }
+
+  uint64_t length_of_result = strlen(buffer);
+
+  uint64_t total_machine_size = 1 + letters_to_words(length_of_result);
+  total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+
+  uint64_t *new_heap = alloc_ptr;
+
+  // do GC and get a new heap pointer if needed
+  if (HEAP_END - alloc_ptr < total_machine_size)
+  {
+    new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
+  }
+
+  // store the new string size
+  new_heap[0] = (length_of_result * 2) + STRING_HEAP_TAG;
 
   memcpy(&new_heap[1], buffer, total_machine_size * 8);
   // return what the heap pointer should be after this allocation

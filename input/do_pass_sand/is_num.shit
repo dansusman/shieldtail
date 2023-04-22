@@ -1,0 +1,2 @@
+print(isnum(123));
+isnum("hi")

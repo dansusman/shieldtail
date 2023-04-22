@@ -11,10 +11,12 @@
         -- str1 ^ str2
 -   [x] charToInt, intToChar | chr, ord
 -   [x] String equality
--   [ ] split/slicing?
--   [ ] toString
+-   [x] slicing
 -   [ ] Build out a string library
--   [ ] String >, <, etc.?
+    -   [x] toString
+    -   [ ] split
+    -   [ ] comparison (but not defined as primops)
+    -   [ ] 
 -   [ ] support strings as input?
         -- write down any input() decisions/make examples to show old stuff still works
 -   [ ] write substantial documentation
