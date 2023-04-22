@@ -100,15 +100,18 @@ binop_operand :
   // Tuples
   | tuple_expr { $1 }
   | binop_operand LBRACK expr RBRACK { EGetItem($1, $3, full_span()) }
-  | binop_operand LBRACK expr COLON expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), Some($7), full_span()) }
-  | binop_operand LBRACK expr COLON expr COLON RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) }
-  | binop_operand LBRACK expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) }
-  | binop_operand LBRACK expr COLON COLON expr RBRACK { ESlice($1, Some($3), None, Some($6), full_span()) }
-  | binop_operand LBRACK COLON expr COLON expr RBRACK { ESlice($1, None, Some($4), Some($6), full_span()) }
-  | binop_operand LBRACK expr COLON RBRACK { ESlice($1, Some($3), None, None, full_span()) }
-  | binop_operand LBRACK COLON expr RBRACK { ESlice($1, None, Some($4), None, full_span()) }
-  | binop_operand LBRACK COLON COLON expr RBRACK { ESlice($1, None, None, Some($5), full_span()) }
-  | binop_operand LBRACK COLON RBRACK { ESlice($1, None, None, None, full_span()) }
+  | binop_operand LBRACK expr COLON expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), Some($7), full_span()) } // t[s:e:st]
+  | binop_operand LBRACK expr COLON expr COLON RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) } // t[s:e:]
+  | binop_operand LBRACK expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) } // t[s:e]
+  | binop_operand LBRACK expr COLON COLON expr RBRACK { ESlice($1, Some($3), None, Some($6), full_span()) } // t[s::st]
+  | binop_operand LBRACK COLON expr COLON expr RBRACK { ESlice($1, None, Some($4), Some($6), full_span()) } // t[:e:st]
+  | binop_operand LBRACK expr COLON RBRACK { ESlice($1, Some($3), None, None, full_span()) } // t[s:]
+  | binop_operand LBRACK expr COLON COLON RBRACK { ESlice($1, Some($3), None, None, full_span()) } // t[s::]
+  | binop_operand LBRACK COLON expr RBRACK { ESlice($1, None, Some($4), None, full_span()) } // t[:e]
+  | binop_operand LBRACK COLON expr COLON RBRACK { ESlice($1, None, Some($4), None, full_span()) } // t[:e:]
+  | binop_operand LBRACK COLON COLON expr RBRACK { ESlice($1, None, None, Some($5), full_span()) } // t[::st]
+  | binop_operand LBRACK COLON RBRACK { ESlice($1, None, None, None, full_span()) } //t[:]
+  | binop_operand LBRACK COLON COLON RBRACK { ESlice($1, None, None, None, full_span()) } //t[::]
   // Function calls
   | binop_operand LPARENNOSPACE exprs RPAREN %prec LPARENNOSPACE { EApp($1, $3, Unknown, full_span()) }
   | binop_operand LPARENNOSPACE RPAREN %prec LPARENNOSPACE { EApp($1, [], Unknown, full_span()) }

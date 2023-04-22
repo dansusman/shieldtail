@@ -963,11 +963,15 @@ let free_vars (e : 'a aexpr) : StringSet.t =
         StringSet.union func_free args_free
     | CTuple (els, _) -> free_vars_I_list els bound
     | CSlice (str, s, en, step, _) ->
-      (* TODO continue fixing compilation errors for options here *)
+        let free_vars_slice e =
+          match e with
+          | Some x -> free_vars_I x bound
+          | None -> StringSet.empty
+        in
         let str_free = free_vars_I str bound in
-        let s_free = free_vars_I s bound in
-        let e_free = free_vars_I en bound in
-        let step_free = free_vars_I step bound in
+        let s_free = free_vars_slice s in
+        let e_free = free_vars_slice en in
+        let step_free = free_vars_slice step in
         StringSet.union (StringSet.union (StringSet.union str_free s_free) e_free) step_free
     | CGetItem (tup, idx, _) ->
         let tup_free = free_vars_I tup bound in
@@ -1056,9 +1060,9 @@ let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
   | CTuple (els, tag) -> CTuple (List.map free_vars_I els, (free_vars (ACExpr e), tag))
   | CSlice (str, s, en, step, tag) ->
       let str_free = free_vars_I str in
-      let s_free = free_vars_I s in
-      let e_free = free_vars_I en in
-      let step_free = free_vars_I step in
+      let s_free = Option.map free_vars_I s in
+      let e_free = Option.map free_vars_I en in
+      let step_free = Option.map free_vars_I step in
       CSlice (str_free, s_free, e_free, step_free, (free_vars (ACExpr e), tag))
   | CGetItem (tup, idx, tag) ->
       let tup_free = free_vars_I tup in
@@ -1563,15 +1567,35 @@ and compile_cexpr
       @ [IJmp (Label done_label); ILabel else_label]
       @ c_els @ [ILabel done_label]
   | CSlice (str, s, en, step, _) ->
+      let compile_slice e =
+        match e with
+        | Some x -> compile_imm x env lambda_tag
+        | None -> Const (-2L)
+      in
+      let use_default e =
+        match e with
+        | Some _ -> Const 0L
+        | None -> Const 1L
+      in
       let c_str = compile_imm str env lambda_tag in
-      let c_s = compile_imm s env lambda_tag in
-      let c_e = compile_imm en env lambda_tag in
-      let c_step = compile_imm step env lambda_tag in
+      let c_s = compile_slice s in
+      let c_e = compile_slice en in
+      let c_step = compile_slice step in
       check_tup_tag c_str "?err_slice_not_seq"
       @ check_num_tag c_s "?err_slice_not_num"
       @ check_num_tag c_e "?err_slice_not_num"
       @ check_num_tag c_step "?err_slice_not_num"
-      @ native_call (Label "?slice") [c_str; c_s; c_e; c_step; Reg heap_reg; Reg RBP; Reg RSP]
+      @ native_call (Label "?slice")
+          [ c_str;
+            c_s;
+            use_default s;
+            c_e;
+            use_default en;
+            c_step;
+            use_default step;
+            Reg heap_reg;
+            Reg RBP;
+            Reg RSP ]
       @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
           IMov (Reg RAX, Reg heap_reg);
           IOr (Reg RAX, Const tuple_tag);

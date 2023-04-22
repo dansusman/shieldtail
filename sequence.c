@@ -219,7 +219,7 @@ uint64_t charToInt(SNAKEVAL chr_val)
   return chr[1] * 2;
 }
 
-uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, SNAKEVAL step_val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
+uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, bool start_default, SNAKEVAL end_idx_val, bool end_default, SNAKEVAL step_val, bool step_default, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
 {
   uint64_t *seq = (uint64_t *)(seq_val - TUPLE_TAG);
   bool is_string = (seq[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
@@ -240,9 +240,39 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, S
     size = seq[0] / 2;
   }
 
-  uint64_t start_idx = start_idx_val / 2;
-  uint64_t end_idx = end_idx_val / 2;
-  uint64_t step = step_val / 2;
+  uint64_t start_idx;
+  uint64_t end_idx;
+  uint64_t step;
+
+  if (step_default)
+  {
+    step = 1;
+  }
+  else
+  {
+    step = step_val / 2;
+  }
+
+  bool negative_step = ((int32_t)step) < 0;
+
+  if (start_default)
+  {
+    start_idx = negative_step ? size - 1 : 0;
+  }
+  else
+  {
+    start_idx = start_idx_val / 2;
+  }
+
+  if (end_default)
+  {
+    end_idx = negative_step ? -1 : size;
+  }
+  else
+  {
+    end_idx = end_idx_val / 2;
+  }
+
   uint64_t buffer[size];
   int length_of_result;
 
@@ -255,7 +285,7 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, S
     char *str = (char *)&seq[1];
     char *new_str = (char *)buffer;
     // copy in all of the elements from the first heap sequence
-    for (int i = start_idx; ((int32_t)step) > 0 ? i < (int32_t)end_idx : i > (int32_t)end_idx; i += step)
+    for (int i = start_idx; negative_step ? i > (int32_t)end_idx : i < (int32_t)end_idx; i += step)
     {
       // strings store multiple chars in one word so we need to account for different heap addresses
       if (i < size && i >= 0)
