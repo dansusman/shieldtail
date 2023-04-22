@@ -35,6 +35,8 @@ extern uint64_t ERR_CONCAT_NOT_SAME;
 extern uint64_t ERR_LENGTH_NOT_SEQ;
 extern uint64_t ERR_ORD_NOT_CHAR;
 extern uint64_t ERR_CHR_NOT_NUM;
+extern uint64_t ERR_SLICE_NOT_SEQ;
+extern uint64_t ERR_SLICE_NOT_NUM;
 
 extern uint64_t *HEAP_END asm("?HEAP_END");
 
@@ -223,6 +225,11 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, S
   bool is_string = (seq[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
   uint64_t size;
 
+  if (step_val == 0)
+  {
+    error(ERR_SLICE_NOT_NUM, step_val);
+  }
+
   if (is_string)
   {
     // take off the tag, we just want the machine size
@@ -237,43 +244,42 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, SNAKEVAL end_idx_val, S
   uint64_t end_idx = end_idx_val / 2;
   uint64_t step = step_val / 2;
   uint64_t buffer[size];
-  int counter;
+  int length_of_result;
 
+  // we don't know exactly how large our newly allocated heap sequence should be
+  // so do the assignment into a buffer and count how big our thing is
+  // then we'll copy that buffer to the correct heap location later
   if (is_string)
   {
-    counter = 8;
-    char *seq1_char = (char *)seq;
+    length_of_result = 0;
+    char *str = (char *)&seq[1];
     char *new_str = (char *)buffer;
     // copy in all of the elements from the first heap sequence
-    for (int i = 8 + start_idx; i < end_idx + 8; i += step)
+    for (int i = start_idx; ((int32_t)step) > 0 ? i < (int32_t)end_idx : i > (int32_t)end_idx; i += step)
     {
       // strings store multiple chars in one word so we need to account for different heap addresses
-      if (i - 8 < size && i - 8 >= 0)
+      if (i < size && i >= 0)
       {
-        new_str[counter] = seq1_char[i];
-
-        counter++;
+        new_str[length_of_result] = str[i];
+        length_of_result++;
       }
     }
   }
   else
   {
-    counter = 1;
+    uint64_t *tup = &seq[1];
+    length_of_result = 0;
     // copy in all of the elements from the first heap sequence
-    for (int i = start_idx; i < end_idx; i += step)
+    for (int i = start_idx; ((int32_t)step) > 0 ? i < (int32_t)end_idx : i > (int32_t)end_idx; i += step)
     {
       // strings store multiple chars in one word so we need to account for different heap addresses
-      if (i - 1 < size && i - 1 >= 0)
+      if (i < size && i >= 0)
       {
-        buffer[counter] = seq[i + 1];
-        counter++;
+        buffer[length_of_result] = tup[i];
+        length_of_result++;
       }
     }
   }
-
-  // TODO: fix negatives!!
-
-  uint64_t length_of_result = is_string ? counter - 8 : counter;
 
   uint64_t total_machine_size = 1 + (is_string ? letters_to_words(length_of_result) : length_of_result);
   total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;

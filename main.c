@@ -424,7 +424,7 @@ void error(uint64_t code, SNAKEVAL val)
     printHelp(stderr, val);
     break;
   case ERR_SLICE_NOT_NUM:
-    fprintf(stderr, "Error: slicing expected a number, but got ");
+    fprintf(stderr, "Error: slicing expected numbers (with step != 0), but got ");
     printHelp(stderr, val);
     break;
   default:
