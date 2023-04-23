@@ -333,8 +333,6 @@ uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, bool start_default, SNA
 
 uint64_t numToString(SNAKEVAL val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
 {
-  fprintf(stderr, "numToString: \n");
-  fprintf(stderr, "%ld\n", val);
   char buffer[21]; // just enough room for 64-bit nums
 
   if ((val & NUM_TAG_MASK) == NUM_TAG)

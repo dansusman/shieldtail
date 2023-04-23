@@ -14,11 +14,10 @@
 -   [x] slicing
 -   [ ] Build out a string library
     -   [x] toString
-    -   [ ] split
-    -   [ ] comparison (but not defined as primops)
-    -   [ ] 
--   [ ] support strings as input?
-        -- write down any input() decisions/make examples to show old stuff still works
+    -   [x] split
+    -   [x] comparison (but not defined as primops)
+    -   [x] isPrefix
+-   [ ] escape sequence printing
 -   [ ] write substantial documentation
 -   [ ] test a bunch of random special characters via ascii code and direct usage
 
@@ -28,7 +27,7 @@
     -   use the LSB of arity to delineate
 -   [x] Create and store strings on heap (return the heap_reg, ofc)
 -   [x] Tuple indexing and other existing things must not accept strings
--   [ ] Tag error checks for prim ops
+-   [x] Tag error checks for prim ops
         -- concatenation needs to check for string tag for left and right
 
 # Implement the functionality to demo
@@ -36,7 +35,7 @@
 -   [x] Caesar cipher (input, string get at index, len, ord, chr, concat)
 -   [ ] Pig Latin (input, slicing, len, concat, split)
 -   [ ] Sort a list of strings (input, comparison, split)
--   [ ] reverse a string [::-1] (input, slicing)
+-   [x] reverse a string [::-1] (input, slicing)
 
 # Dicts
 
@@ -45,6 +44,10 @@
 -   [ ] Handle duplicate keys
 -   [ ] Make interesting test cases
 -   [ ] Be creative if we feel like it
+
+# Testing
+
+-   [ ] Make sure existing prim ops do/don't allow strings appropriately
 
 # Presentation
 

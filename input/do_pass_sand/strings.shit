@@ -1,4 +1,3 @@
-
 def toStringHelp(e, tupleToString, in_tuple):
     if e == true: "true"
     else: if e == false: "false"
@@ -17,4 +16,59 @@ def tupleToString(e, idx):
 def toString(e):
     toStringHelp(e, tupleToString, false)
 
-toString((true, false, nil, "hello", (1 + 2, (1, )), 231, (lambda (x): x)))
+def isPrefix(str, prefix):
+    if len(prefix) > len(str): false
+    else: if len(prefix) == 0: true
+    else: equal(str[0], prefix[0]) && isPrefix(str[1:], prefix[1:])
+
+def splitHelp(str, delim, acc):
+    if len(str) == 0: (acc, )
+    else: 
+        let fs = str[0], rst = str[1:] in
+        if equal(fs, delim): (acc,) ^ splitHelp(rst, delim, "")
+        else: splitHelp(rst, delim, acc ^ fs)
+
+def split(str, delim):
+    splitHelp(str, delim, "")
+
+def compare(str1, str2):
+    let len2 = len(str2) in
+    if len(str1) == 0: 
+        if len2 == 0: 0 else: -1
+    else: if len2 == 0: 
+        1
+    else: if equal(str1[0], str2[0]): 
+        compare(str1[1:], str2[1:])
+    else: 
+        let first = ord(str1[0]), second = ord(str2[0]) in
+        if first < second: -1 else: 1
+
+def strLt(str1, str2):
+    compare(str1, str2) == -1
+
+def strLte(str1, str2):
+    compare(str1, str2) <= 0
+
+def strGt(str1, str2):
+    compare(str1, str2) == 1
+
+def strGte(str1, str2):
+    compare(str1, str2) >= 0
+
+print(toString((true, false, nil, "hello", (1 + 2, (1, )), 231, (lambda (x): x))));
+print(isPrefix("hello", "he"));
+print(isPrefix("hello", "qe"));
+print(isPrefix("hello", "hello"));
+print(isPrefix("hello", "hellop"));
+print(split("hello, world!", ","));
+print(compare("hello", "hello"));
+print(compare("abc", "hello"));
+print(compare("helpo", "hello"));
+print(compare("helloadlkfj", "hello"));
+print(compare("hello", "helloadlkfjdkf"));
+print(strLt("hello", "hello"));
+print(strLte("hello", "hello"));
+print(strLt("abc", "hello"));
+print(strGt("helpo", "hello"));
+print(strGte("helloadlkfj", "hello"));
+strGte("hello", "helloadlkfjdkf")
