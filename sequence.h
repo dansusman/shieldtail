@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <limits.h>
 #include "gc.h"
 
 typedef uint64_t SNAKEVAL;
@@ -17,5 +18,6 @@ uint64_t intToChar(SNAKEVAL num, uint64_t *alloc_ptr, uint64_t *cur_frame, uint6
 uint64_t charToInt(SNAKEVAL chr) asm("ord");
 uint64_t slice(SNAKEVAL seq_val, SNAKEVAL start_idx_val, bool start_default, SNAKEVAL end_idx_val, bool end_default, SNAKEVAL step_val, bool step_default, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?slice");
 uint64_t numToString(SNAKEVAL val, uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("numToString");
+uint64_t fromString(SNAKEVAL str_val) asm("fromString");
 
 #endif

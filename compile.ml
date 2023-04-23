@@ -8,7 +8,16 @@ open Graph
 module StringSet = Set.Make (String)
 
 let c_global_function_names =
-  ["input"; "print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"; "numToString"]
+  [ "input";
+    "print";
+    "equal";
+    "error";
+    "print_stack";
+    "len";
+    "chr";
+    "ord";
+    "numToString";
+    "fromString" ]
 ;;
 
 let c_global_function_arities =
@@ -20,7 +29,8 @@ let c_global_function_arities =
     ("len", 1);
     ("chr", 1);
     ("ord", 1);
-    ("numToString", 1) ]
+    ("numToString", 1);
+    ("fromString", 1) ]
 ;;
 
 type 'a name_envt = (string * 'a) list
@@ -110,6 +120,10 @@ let err_SLICE_NOT_NUM = 25L
 
 let err_NUM_TO_STRING_NOT_NUM = 26L
 
+let err_FROM_STR_NOT_STR = 27L
+
+let err_FROM_STR_INVALID = 28L
+
 let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
 
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
@@ -145,7 +159,13 @@ let initial_val_env = []
 let prim_bindings = []
 
 let native_fun_bindings =
-  [("equal", 2); ("input", 0); ("len", 1); ("chr", 1); ("ord", 1); ("numToString", 1)]
+  [ ("equal", 2);
+    ("input", 0);
+    ("len", 1);
+    ("chr", 1);
+    ("ord", 1);
+    ("numToString", 1);
+    ("fromString", 1) ]
 ;;
 
 let initial_fun_env =
@@ -1446,7 +1466,7 @@ and compile_cexpr
           (* If matches the tag, jump over next instruction *)
           IJne (Label label);
           (* Set RAX to false if we reach here, meaning isnum/bool false *)
-          IMov (Reg RAX, const_true); ]
+          IMov (Reg RAX, const_true) ]
       in
       let predicate_prim1_heap (label : string) (heap_tag : int64) : instruction list =
         [ IMov (Reg RAX, e_reg);
@@ -1866,17 +1886,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-    else [] )
+      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+      else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-    then []
-    else
-      [ IInstrComment
-          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-            sprintf "Popping %d arguments" num_stack_args ) ] )
+      then []
+      else
+        [ IInstrComment
+            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+              sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
@@ -1960,6 +1980,7 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
      extern numToString\n\
      extern ord\n\
      extern ?slice\n\
+     extern fromString\n\
      global ?our_code_starts_here"
   in
   let suffix =
@@ -1986,7 +2007,9 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_concat_not_seq:%s\n\
        ?err_slice_not_seq:%s\n\
        ?err_slice_not_num:%s\n\
-       ?err_num_to_string_not_num:%s\n"
+       ?err_num_to_string_not_num:%s\n\
+       ?err_from_str_not_str:%s\n\
+       ?err_from_str_invalid:%s\n"
       (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
@@ -2010,6 +2033,8 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
       (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_SEQ; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_NUM; Reg scratch_reg]))
       (to_asm (native_call (Label "?error") [Const err_NUM_TO_STRING_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_FROM_STR_NOT_STR; Reg scratch_reg]))
+      (to_asm (native_call (Label "?error") [Const err_FROM_STR_INVALID; Reg scratch_reg]))
   in
   match anfed with
   | AProgram (body, (_, tag)) ->

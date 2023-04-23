@@ -11,6 +11,8 @@ extern uint64_t TUPLE_TAG;
 extern uint64_t FORWARDING_TAG;
 extern uint64_t STRING_HEAP_TAG;
 extern uint64_t NIL;
+extern uint64_t BOOL_TRUE;
+extern uint64_t BOOL_FALSE;
 
 extern uint64_t ERR_COMP_NOT_NUM;
 extern uint64_t ERR_ARITH_NOT_NUM;
@@ -38,6 +40,8 @@ extern uint64_t ERR_CHR_NOT_NUM;
 extern uint64_t ERR_SLICE_NOT_SEQ;
 extern uint64_t ERR_SLICE_NOT_NUM;
 extern uint64_t ERR_NUM_TO_STRING_NOT_NUM;
+extern uint64_t ERR_FROM_STR_INVALID;
+extern uint64_t ERR_FROM_STR_NOT_STR;
 
 extern uint64_t *HEAP_END asm("?HEAP_END");
 
@@ -363,4 +367,64 @@ uint64_t numToString(SNAKEVAL val, uint64_t *alloc_ptr, uint64_t *cur_frame, uin
   memcpy(&new_heap[1], buffer, total_machine_size * 8);
   // return what the heap pointer should be after this allocation
   return new_heap + total_machine_size;
+}
+
+uint64_t fromString(SNAKEVAL str_val)
+{
+  uint64_t *seq = (uint64_t *)(str_val - TUPLE_TAG);
+  bool is_seq = (str_val & TUPLE_TAG_MASK) == TUPLE_TAG;
+  if (!is_seq)
+  {
+    error(ERR_FROM_STR_NOT_STR, str_val);
+  }
+  char *str = (char *)(str_val - TUPLE_TAG);
+  bool is_string = (str[0] & SEQ_HEAP_TAG_MASK) == STRING_HEAP_TAG;
+  if (!is_string)
+  {
+    error(ERR_FROM_STR_NOT_STR, str_val);
+  }
+  uint64_t length = (str[0] - STRING_HEAP_TAG) / 2;
+  char buffer[21]; // just enough room for 64-bit nums
+
+  if (length > 21)
+  {
+    error(ERR_FROM_STR_INVALID, str_val);
+  }
+
+  char *test = (char *)&seq[1];
+  for (int i = 0; i < length; i++)
+  {
+    buffer[i] = test[i];
+  }
+
+  buffer[length] = '\0';
+
+  if (strncmp(buffer, "true", 4) == 0)
+  {
+    return BOOL_TRUE;
+  }
+  if (strncmp(buffer, "false", 5) == 0)
+  {
+    return BOOL_FALSE;
+  }
+  if (strncmp(buffer, "nil", 3) == 0)
+  {
+    return NIL;
+  }
+  int64_t read_num;
+  int code = sscanf(buffer, "%ld", &read_num);
+
+  if (code == 0)
+  {
+    return str_val;
+  }
+
+  if ((read_num > (LONG_MAX / 2)) || (read_num < (LONG_MIN / 2)))
+  {
+    error(ERR_OVERFLOW, read_num * 2);
+  }
+
+  SNAKEVAL read_val = (SNAKEVAL)(read_num * 2);
+
+  return read_val;
 }

@@ -1,0 +1,14 @@
+def implode(tup):
+    if len(tup) == 0: ""
+    else: tup[0] ^ implode(tup[1:])
+
+def explode(str):
+    if len(str) == 0: ()
+    else: (str[0], ) ^ explode(str[1:])
+
+print(implode(()));
+print(implode(("1", "2", "3")));
+print(implode(("c", "o", "M", "p", "ile", "T", "his")));
+print(explode("some string"));
+print(explode(""));
+(implode(explode("this is not the SHITtiest language ever")))

@@ -1,0 +1,8 @@
+print(fromString("hello"));
+print(fromString("123"));
+print(fromString("nil"));
+print(fromString("false"));
+print(fromString("true"));
+print(fromString("(1, 2, 3, 4, 5, 6)"));
+print(fromString("23094820394809238"));
+fromString("-44")

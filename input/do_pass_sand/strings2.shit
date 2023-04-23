@@ -1,0 +1,60 @@
+def isLowercase(str):
+    if len(str) == 0: true
+    else:
+        let o = ord(str[0]) in
+        ((o >= 97) && (o <= 122)) && isLowercase(str[1:])
+
+def isUppercase(str):
+    if len(str) == 0: true
+    else:
+        let o = ord(str[0]) in
+        ((o >= 65) && (o <= 90)) && isUppercase(str[1:])
+
+def isAlpha(str):
+    isUppercase(str) || isLowercase(str)
+
+def isNumeric(str):
+    if len(str) == 0: true
+    else:
+        let o = ord(str[0]) in
+        ((o >= 48) && (o <= 57)) && isNumeric(str[1:])
+
+def isAlphanumeric(str):
+    if len(str) == 0: true
+    else: (isAlpha(str[0]) || isNumeric(str[0])) && isAlphanumeric(str[1:])
+
+def toLowercase(str):
+    if len(str) == 0: str
+    else: if (!(isAlpha(str[0])) || isLowercase(str[0])): str[0] ^ toLowercase(str[1:])
+    else: chr(ord(str[0]) + 32) ^ toLowercase(str[1:])
+
+def toUppercase(str):
+    if len(str) == 0: str
+    else: if (!(isAlpha(str[0])) || isUppercase(str[0])): str[0] ^ toUppercase(str[1:])
+    else: chr(ord(str[0]) - 32) ^ toUppercase(str[1:])
+
+def equalsIgnoreCase(str1, str2):
+    equal(toLowercase(str1), toLowercase(str2))
+
+print(isLowercase("asdf"));
+print(isLowercase("asDF"));
+print(isLowercase("ASDF"));
+print(isUppercase("asdf"));
+print(isUppercase("asDF"));
+print(isUppercase("ASDF"));
+print(isLowercase("123"));
+print(isUppercase("123"));
+print(isAlpha("hello"));
+print(isAlpha("hello, world!"));
+print(isNumeric("hello, world!"));
+print(isNumeric("123"));
+print(toLowercase("HELP ME! AHHH"));
+print(toLowercase("seriouslY, PlEasE"));
+print(toUppercase("this is not Very ImPorTant, to Be HONest"));
+print(toUppercase("ALREADY UPPER"));
+print(isAlphanumeric("123hey456"));
+print(equalsIgnoreCase("hello", "HELLO"));
+print(equalsIgnoreCase("HELLO", "HELLO"));
+print(equalsIgnoreCase("HElLo", "heLlO"));
+print(equalsIgnoreCase("greetings", "GrEENtings"));
+equalsIgnoreCase("123", "123")

@@ -12,7 +12,7 @@
 -   [x] charToInt, intToChar | chr, ord
 -   [x] String equality
 -   [x] slicing
--   [ ] Build out a string library
+-   [x] Build out a string library
     -   [x] toString
     -   [x] split
     -   [x] comparison (but not defined as primops)
@@ -33,17 +33,9 @@
 # Implement the functionality to demo
 
 -   [x] Caesar cipher (input, string get at index, len, ord, chr, concat)
+-   [x] reverse a string [::-1] (input, slicing)
 -   [ ] Pig Latin (input, slicing, len, concat, split)
 -   [ ] Sort a list of strings (input, comparison, split)
--   [x] reverse a string [::-1] (input, slicing)
-
-# Dicts
-
--   [ ] Add parsing/lexing support
--   [ ] Desugar appropriately
--   [ ] Handle duplicate keys
--   [ ] Make interesting test cases
--   [ ] Be creative if we feel like it
 
 # Testing
 
@@ -51,6 +43,7 @@
 
 # Presentation
 
+-   [ ] Write down where each string operation in STRINGS.md lives within input/ dir
 -   [ ] Build a slide deck
 -   [ ] Divide and Conquer
 -   [ ] Practice a little
@@ -64,8 +57,4 @@
 # Other Ideas
 
 -   [ ] Support strings as input
--   [ ] Decouple tuple and string logic?
 -   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)
--   [ ] f strings? (if it's just a desugaring or
-        something comparably simple)
--   [ ] StringBuilders?

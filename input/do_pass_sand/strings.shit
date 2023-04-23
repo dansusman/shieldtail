@@ -25,11 +25,13 @@ def splitHelp(str, delim, acc):
     if len(str) == 0: (acc, )
     else: 
         let fs = str[0], rst = str[1:] in
-        if equal(fs, delim): (acc,) ^ splitHelp(rst, delim, "")
+        if isPrefix(delim, fs): 
+            (acc,) ^ splitHelp(str[len(delim):], delim, "")
         else: splitHelp(rst, delim, acc ^ fs)
 
 def split(str, delim):
-    splitHelp(str, delim, "")
+    if len(str) == 0: (str,)
+    else: splitHelp(str, delim, "")
 
 def compare(str1, str2):
     let len2 = len(str2) in
@@ -55,20 +57,41 @@ def strGt(str1, str2):
 def strGte(str1, str2):
     compare(str1, str2) >= 0
 
+def indexOf(src, elem):
+    if len(src) == 0: -1
+    else: if isPrefix(src, elem): 0
+    else: 
+        let ans = indexOf(src[1:], elem) in
+        if ans == -1: ans else: 1 + ans
+
+def contains(src, elem):
+    !(indexOf(src, elem) == -1)
+
 print(toString((true, false, nil, "hello", (1 + 2, (1, )), 231, (lambda (x): x))));
 print(isPrefix("hello", "he"));
 print(isPrefix("hello", "qe"));
 print(isPrefix("hello", "hello"));
 print(isPrefix("hello", "hellop"));
+print(split("", ","));
 print(split("hello, world!", ","));
+print(split("hello, world!", ", w"));
 print(compare("hello", "hello"));
 print(compare("abc", "hello"));
 print(compare("helpo", "hello"));
 print(compare("helloadlkfj", "hello"));
 print(compare("hello", "helloadlkfjdkf"));
+print(compare("", "p"));
+print(compare("", ""));
 print(strLt("hello", "hello"));
 print(strLte("hello", "hello"));
 print(strLt("abc", "hello"));
 print(strGt("helpo", "hello"));
 print(strGte("helloadlkfj", "hello"));
-strGte("hello", "helloadlkfjdkf")
+print(strGte("hello", "helloadlkfjdkf"));
+print(indexOf("hello", "h"));
+print(indexOf("hello, world!", "d"));
+print(indexOf("hello", "hel"));
+print(indexOf("hello", "hep"));
+print(contains("hello", "hep"));
+print(contains("hello", "hello"));
+contains("hello", "el")

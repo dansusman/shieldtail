@@ -62,6 +62,8 @@ const uint64_t ERR_CHR_NOT_NUM = 23;
 const uint64_t ERR_SLICE_NOT_SEQ = 24;
 const uint64_t ERR_SLICE_NOT_NUM = 25;
 const uint64_t ERR_NUM_TO_STRING_NOT_NUM = 26;
+const uint64_t ERR_FROM_STR_NOT_STR = 27;
+const uint64_t ERR_FROM_STR_INVALID = 28;
 
 size_t HEAP_SIZE;
 uint64_t *STACK_BOTTOM;
@@ -461,6 +463,14 @@ void error(uint64_t code, SNAKEVAL val)
     break;
   case ERR_NUM_TO_STRING_NOT_NUM:
     fprintf(stderr, "Error: numToString expected a number, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_FROM_STR_NOT_STR:
+    fprintf(stderr, "Error: fromString expected a string, but got ");
+    printHelp(stderr, val);
+    break;
+  case ERR_FROM_STR_INVALID:
+    fprintf(stderr, "Error: fromString expected str representation of number, boolean, nil, or string, but got ");
     printHelp(stderr, val);
     break;
   default:
