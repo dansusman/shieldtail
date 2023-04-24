@@ -18,7 +18,6 @@
     -   [x] comparison (but not defined as primops)
     -   [x] isPrefix
 -   [x] escape sequence printing
--   [ ] write substantial documentation
 -   [x] test a bunch of random special characters via ascii code and direct usage
 
 ## Compilation
@@ -43,18 +42,19 @@
 
 # Presentation
 
--   [ ] Write down where each string operation in STRINGS.md lives within input/ dir
--   [ ] Build a slide deck
--   [ ] Divide and Conquer
--   [ ] Practice a little
--   [ ] Highlight important design decisions (see DECISIONS.md)
--   [ ] Well-defined and Heavily Detailed README
+-   [ ] write substantial documentation - D
+-   [ ] Write down where each string operation in STRINGS.md lives within input/ dir - D
+-   [ ] Write some agenda notes
+-   [ ] Highlight important design decisions (see DECISIONS.md) - D
+-   [ ] Well-defined and Heavily Detailed README - D then J
         -- usage examples
         -- supported language features
         -- high-level description
         -- snake puns (maybe a snake starting with S?)
+-   [ ] write lots of integration tests - J
+-   [ ] revive test.ml - D
+-   [ ] revive existing integration tests - J
 
 # Other Ideas
 
 -   [x] Support strings as input
--   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)

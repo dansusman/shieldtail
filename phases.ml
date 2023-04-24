@@ -137,7 +137,7 @@ let print_trace (trace : phase list) : string list =
         string_of_aprogram_with 1000
           (fun (fvs, tag) ->
             sprintf "(FVS: [%s])" (ExtString.String.join ", " (StringSet.elements fvs)) )
-          p (* TODO maybe add prettier printing with actual FVs *)
+          p
     | Located (p, e) ->
         string_of_aprogram_with 1000 (fun (_, tag) -> sprintf "@%d" tag) p
         ^ "\nEnvs:\n"

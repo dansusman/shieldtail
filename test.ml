@@ -501,10 +501,8 @@ let reg_alloc_suite =
   "reg_alloc_suite"
   >::: [ tregalloc "num" "3" [(0, [])];
          tregalloc "prim1" "sub1(6)" [(0, [])];
-         (* TODO there's a let, there should be a reg *)
          tregalloc "let" "let x = 1 in x" [(0, [("x_4", Reg R10)])];
          tregalloc "two_prim1s" "add1(sub1(6))" [(0, [("unary_3", Reg R10)])];
-         (* TODO let free adder programs should use <=1 register *)
          tregalloc "three_prim1s" "add1(add1(sub1(6)))"
            [(0, [("unary_3", Reg R12); ("unary_4", Reg R10)])];
          tregalloc "four_prim1s" "sub1(add1(add1(sub1(6))))"
@@ -905,7 +903,6 @@ let string_gc =
 
 let gc_suite = "gc_suite" >::: oom @ gc @ string_gc
 
-(* TODO test special characters (like \n) *)
 let input_suite = "input_suite" >::: [t "input1" "let x = input() in x + 2" "123" "125"]
 
 let compile_aexpr_suite =
