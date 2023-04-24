@@ -1,21 +1,3 @@
-def toStringHelp(e, tupleToString, in_tuple):
-    if e == true: "true"
-    else: if e == false: "false"
-    else: if e == nil: "nil"
-    else: if isstring(e): if in_tuple: "\"" ^ e ^ "\"" else: e
-    else: if istuple(e): "(" ^ tupleToString(e, 0) ^ ")"
-    else: if isnum(e): numToString(e)
-    else: "<closure>"
-
-def tupleToString(e, idx):
-    if len(e) == idx: ""
-    else: if len(e) == 1: toStringHelp(e[idx], tupleToString, true) ^ ", " 
-    else: if len(e) - 1 == idx: toStringHelp(e[idx], tupleToString, true)
-    else: toStringHelp(e[idx], tupleToString, true) ^ ", " ^ tupleToString(e, add1(idx))
-
-def toString(e):
-    toStringHelp(e, tupleToString, false)
-
 def isPrefix(str, prefix):
     if len(prefix) > len(str): false
     else: if len(prefix) == 0: true
@@ -67,7 +49,16 @@ def indexOf(src, elem):
 def contains(src, elem):
     !(indexOf(src, elem) == -1)
 
-print(toString((true, false, nil, "hello", (1 + 2, (1, )), 231, (lambda (x): x))));
+def pigLatinHelp(s):
+    if len(s) == 0: ""
+    else: s[0][1:] ^ s[0][0] ^ "ay " ^ pigLatinHelp(s[1:])
+
+def pigLatin(s):
+    if len(s) == 0: s
+    else:
+        let words = split(s, " ") in
+        pigLatinHelp(words)
+
 print(isPrefix("hello", "he"));
 print(isPrefix("hello", "qe"));
 print(isPrefix("hello", "hello"));
@@ -94,4 +85,7 @@ print(indexOf("hello", "hel"));
 print(indexOf("hello", "hep"));
 print(contains("hello", "hep"));
 print(contains("hello", "hello"));
-contains("hello", "el")
+print(contains("hello", "el"));
+print(pigLatin("pig latin is the best way to communicate"));
+print(pigLatin(""));
+pigLatin("\n")

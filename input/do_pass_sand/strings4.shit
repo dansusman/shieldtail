@@ -1,0 +1,19 @@
+def toStringHelp(e, tupleToString, in_tuple):
+    if e == true: "true"
+    else: if e == false: "false"
+    else: if e == nil: "nil"
+    else: if isstring(e): if in_tuple: "\"" ^ e ^ "\"" else: e
+    else: if istuple(e): "(" ^ tupleToString(e, 0) ^ ")"
+    else: if isnum(e): numToString(e)
+    else: "<closure>"
+
+def tupleToString(e, idx):
+    if len(e) == idx: ""
+    else: if len(e) == 1: toStringHelp(e[idx], tupleToString, true) ^ ", " 
+    else: if len(e) - 1 == idx: toStringHelp(e[idx], tupleToString, true)
+    else: toStringHelp(e[idx], tupleToString, true) ^ ", " ^ tupleToString(e, add1(idx))
+
+def toString(e):
+    toStringHelp(e, tupleToString, false)
+
+toString((true, false, nil, "hello", (1 + 2, (1, )), 231, (lambda (x): x)))

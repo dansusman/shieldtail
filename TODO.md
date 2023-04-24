@@ -34,8 +34,8 @@
 
 -   [x] Caesar cipher (input, string get at index, len, ord, chr, concat)
 -   [x] reverse a string [::-1] (input, slicing)
--   [ ] Pig Latin (input, slicing, len, concat, split)
--   [ ] Sort a list of strings (input, comparison, split)
+-   [x] Pig Latin (input, slicing, len, concat, split)
+-   [x] Sort a list of strings (input, comparison, split)
 
 # Testing
 

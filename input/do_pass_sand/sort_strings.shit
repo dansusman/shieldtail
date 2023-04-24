@@ -1,0 +1,54 @@
+def isPrefix(str, prefix):
+    if len(prefix) > len(str): false
+    else: if len(prefix) == 0: true
+    else: equal(str[0], prefix[0]) && isPrefix(str[1:], prefix[1:])
+
+def splitHelp(str, delim, acc):
+    if len(str) == 0: (acc, )
+    else: 
+        let fs = str[0], rst = str[1:] in
+        if isPrefix(delim, fs): 
+            (acc,) ^ splitHelp(str[len(delim):], delim, "")
+        else: splitHelp(rst, delim, acc ^ fs)
+
+def split(str, delim):
+    if len(str) == 0: (str,)
+    else: splitHelp(str, delim, "")
+
+def compare(str1, str2):
+    let len2 = len(str2) in
+    if len(str1) == 0: 
+        if len2 == 0: 0 else: -1
+    else: if len2 == 0: 
+        1
+    else: if equal(str1[0], str2[0]): 
+        compare(str1[1:], str2[1:])
+    else: 
+        let first = ord(str1[0]), second = ord(str2[0]) in
+        if first < second: -1 else: 1
+
+def strLt(str1, str2):
+    compare(str1, str2) == -1
+
+def strGt(str1, str2):
+    compare(str1, str2) == 1
+
+def minimum(ls, lt, minSoFar):
+    if len(ls) == 0: minSoFar
+    else: 
+        minimum(ls[1:], lt, if lt(ls[0], minSoFar): ls[0] else: minSoFar)
+
+def remove(ls, x):
+    if len(ls) == 0: ()
+    else: if equal(ls[0], x): ls[1:]
+    else: (ls[0], ) ^ remove(ls[1:], x)
+
+def sort(ls, lt):
+    if len(ls) <= 1: ls
+    else: 
+        let min = minimum(ls, lt, ls[0]) in
+        (min,) ^ sort(remove(ls, min), lt)
+
+print(sort(split("this is a list of strings of an list of stringss that needs to be sorted", " "), strLt));
+print(sort(split("z y x w v u t s r q p o n m l k j i h g f e d c b a", " "), strLt));
+sort(split("a a b c d e f g h i j k l m n o p q r s t u v w x y z", " "), strGt)
