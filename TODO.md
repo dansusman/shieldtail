@@ -43,7 +43,7 @@
 # Presentation
 
 -   [ ] write substantial documentation - D
--   [ ] Write down where each string operation in STRINGS.md lives within input/ dir - D
+-   [x] Write down where each string operation in STRINGS.md lives within input/ dir - D
 -   [ ] Write some agenda notes
 -   [ ] Highlight important design decisions (see DECISIONS.md) - D
 -   [ ] Well-defined and Heavily Detailed README - D then J

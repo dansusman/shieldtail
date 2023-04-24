@@ -14,8 +14,6 @@
  */
 void naive_print_heap(uint64_t *heap, uint64_t *heap_end) asm("?naive_print_heap");
 
-// IMPLEMENT THE FUNCTIONS BELOW
-
 /*
   Smarter algorithm to print the contents of the heap.  You should implement this function
   much like the naive approach above, but try to have it print out values as Racer values

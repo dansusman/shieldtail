@@ -21,33 +21,33 @@ This repository holds the source code and test files for the SHIT snake language
 ## Example Program
 
 ```
-    def isPrefix(str, prefix):
-        if len(prefix) > len(str): false
-        else: if len(prefix) == 0: true
-        else: equal(str[0], prefix[0]) && isPrefix(str[1:], prefix[1:])
+def isPrefix(str, prefix):
+    if len(prefix) > len(str): false
+    else: if len(prefix) == 0: true
+    else: equal(str[0], prefix[0]) && isPrefix(str[1:], prefix[1:])
 
-    def splitHelp(str, delim, acc):
-        if len(str) == 0: (acc, )
-        else:
-            let fs = str[0], rst = str[1:] in
-            if isPrefix(delim, fs):
-                (acc,) ^ splitHelp(str[len(delim):], delim, "")
-            else: splitHelp(rst, delim, acc ^ fs)
+def splitHelp(str, delim, acc):
+    if len(str) == 0: (acc, )
+    else:
+        let fs = str[0], rst = str[1:] in
+        if isPrefix(delim, fs):
+            (acc,) ^ splitHelp(str[len(delim):], delim, "")
+        else: splitHelp(rst, delim, acc ^ fs)
 
-    def split(str, delim):
-        if len(str) == 0: (str,)
-        else: splitHelp(str, delim, "")
-        def pigLatinHelp(s):
-            if len(s) == 0: ""
-            else: s[0][1:] ^ s[0][0] ^ "ay " ^ pigLatinHelp(s[1:])
+def split(str, delim):
+    if len(str) == 0: (str,)
+    else: splitHelp(str, delim, "")
+    def pigLatinHelp(s):
+        if len(s) == 0: ""
+        else: s[0][1:] ^ s[0][0] ^ "ay " ^ pigLatinHelp(s[1:])
 
-    def pigLatin(s):
-        if len(s) == 0: s
-        else:
-            let words = split(s, " ") in
-            pigLatinHelp(words)
+def pigLatin(s):
+    if len(s) == 0: s
+    else:
+        let words = split(s, " ") in
+        pigLatinHelp(words)
 
-    pigLatin("pig latin is the best way to communicate");
+pigLatin("pig latin is the best way to communicate");
 ```
 
 ## Usage
