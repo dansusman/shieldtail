@@ -1,3 +1,15 @@
+# --------------------------------------------------
+#                    strings4.shit
+#        String Library for the SHIT language (pt. 4)
+# 
+#  Provides the following functionality:
+#   - value to string conversion (`toString(val)')
+# --------------------------------------------------
+
+# Helper for `toString'; performs the actual conversion logic
+# Takes a value to convert to string, a lambda detailing what
+# to do in the tuple case, and a boolean flag for if we are
+# within a tuple currently
 def toStringHelp(e, tupleToString, in_tuple):
     if e == true: "true"
     else: if e == false: "false"
@@ -7,12 +19,15 @@ def toStringHelp(e, tupleToString, in_tuple):
     else: if isnum(e): numToString(e)
     else: "<closure>"
 
+# Helper for `toString'; operates on a tuple, `e', and recursively
+# builds up a string representation for it
 def tupleToString(e, idx):
     if len(e) == idx: ""
     else: if len(e) == 1: toStringHelp(e[idx], tupleToString, true) ^ ", " 
     else: if len(e) - 1 == idx: toStringHelp(e[idx], tupleToString, true)
     else: toStringHelp(e[idx], tupleToString, true) ^ ", " ^ tupleToString(e, add1(idx))
 
+# Constructs and returns a string representation of the given value
 def toString(e):
     toStringHelp(e, tupleToString, false)
 

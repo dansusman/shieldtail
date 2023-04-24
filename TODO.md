@@ -42,7 +42,7 @@
 
 # Presentation
 
--   [ ] write substantial documentation - D
+-   [x] write substantial documentation - D
 -   [x] Write down where each string operation in STRINGS.md lives within input/ dir - D
 -   [ ] Write some agenda notes
 -   [ ] Highlight important design decisions (see DECISIONS.md) - D

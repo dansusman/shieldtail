@@ -1,11 +1,25 @@
+# --------------------------------------------------
+#                    strings3.shit
+#        String Library for the SHIT language (pt. 3)
+# 
+#  Provides the following functionality:
+#   - string to tuple conversion (`explode(str)')
+#   - tuple to string conversion (`implode(tup)')
+# --------------------------------------------------
+
+# Converts the given tuple of strings into a string
+# Example: ("1", "2", "3") -> "123"
 def implode(tup):
     if len(tup) == 0: ""
     else: tup[0] ^ implode(tup[1:])
 
+# Converts the given string into a tuple of its letters
+# Example: "hi, there" -> ("h", "i", ",", " ", "t", "h", "e", "r", "e")
 def explode(str):
     if len(str) == 0: ()
     else: (str[0], ) ^ explode(str[1:])
 
+# ------- Examples --------
 print(implode(()));
 print(implode(("1", "2", "3")));
 print(implode(("c", "o", "M", "p", "ile", "T", "his")));

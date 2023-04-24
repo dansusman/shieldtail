@@ -1,8 +1,27 @@
+# --------------------------------------------------
+#                    strings.shit
+#        String Library for the SHIT language
+# 
+#  Provides the following functionality:
+#   - isPrefix
+#   - split
+#   - indexOf
+#   - charAt
+#   - compare
+#   - strLt, strGt, strLte, strGte 
+# 
+#  Fun Examples included:
+#   - pigLatin
+# --------------------------------------------------
+
+# Returns true if the given `prefix' is a prefix of the given `str'
 def isPrefix(str, prefix):
     if len(prefix) > len(str): false
     else: if len(prefix) == 0: true
     else: equal(str[0], prefix[0]) && isPrefix(str[1:], prefix[1:])
 
+# Helper for `split'; performs the actual splitting logic,
+# accumulating the result as we recurse
 def splitHelp(str, delim, acc):
     if len(str) == 0: (acc, )
     else: 
@@ -11,10 +30,15 @@ def splitHelp(str, delim, acc):
             (acc,) ^ splitHelp(str[len(delim):], delim, "")
         else: splitHelp(rst, delim, acc ^ fs)
 
+# Splits the given string into a tuple of strings, breaking on
+# the given delimiter sequence
 def split(str, delim):
     if len(str) == 0: (str,)
     else: splitHelp(str, delim, "")
 
+# Performs string comparison on the two given strings
+# Returns 0 if the strings are equal, -1 if the `str1'
+# is lexicographically inferior to `str2', and 1 otherwise 
 def compare(str1, str2):
     let len2 = len(str2) in
     if len(str1) == 0: 
@@ -27,18 +51,28 @@ def compare(str1, str2):
         let first = ord(str1[0]), second = ord(str2[0]) in
         if first < second: -1 else: 1
 
+# Returns true if `str1' is lexicographically inferior to `str2';
+# false otherwise
 def strLt(str1, str2):
     compare(str1, str2) == -1
 
+# Returns true if `str1' is lexicographically inferior to `str2' or
+# the strings are equal; false otherwise
 def strLte(str1, str2):
     compare(str1, str2) <= 0
 
+# Returns true if `str1' is lexicographically superior to `str2';
+# false otherwise
 def strGt(str1, str2):
     compare(str1, str2) == 1
 
+# Returns true if `str1' is lexicographically superior to `str2' or
+# the strings are equal; false otherwise
 def strGte(str1, str2):
     compare(str1, str2) >= 0
 
+# Returns the index of the given element, `elem', within the given string,
+# `src'; -1 if the element doesn't exist within the string
 def indexOf(src, elem):
     if len(src) == 0: -1
     else: if isPrefix(src, elem): 0
@@ -46,19 +80,25 @@ def indexOf(src, elem):
         let ans = indexOf(src[1:], elem) in
         if ans == -1: ans else: 1 + ans
 
+# Returns true if the string, `src', contains `elem' somewhere in it
 def contains(src, elem):
     !(indexOf(src, elem) == -1)
 
+# Helper for our `pigLatin' example; performs the actual piglatinization of
+# the given string, `s'
 def pigLatinHelp(s):
     if len(s) == 0: ""
     else: s[0][1:] ^ s[0][0] ^ "ay " ^ pigLatinHelp(s[1:])
 
+# Turn the given string, `s', into its Pig Latin form
+# https://en.wikipedia.org/wiki/Pig_Latin
 def pigLatin(s):
     if len(s) == 0: s
     else:
         let words = split(s, " ") in
         pigLatinHelp(words)
 
+# ------- Examples --------
 print(isPrefix("hello", "he"));
 print(isPrefix("hello", "qe"));
 print(isPrefix("hello", "hello"));
