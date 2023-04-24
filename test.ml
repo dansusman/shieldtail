@@ -898,13 +898,13 @@ let string_gc =
     tgc "gc_numToString" (4 + builtins_size) "numToString(3423432434)" "" "\"3423432434\"";
     tgc "gc_slice" (4 + builtins_size) "\"hello\"[1:4:1]" "" "\"ell\"";
     tgc "gc_string_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0";
+      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(print(100))" "" "0";
     tgc "gc_charAt_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(100)" "" "0";
+      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(print(100))" "" "0";
     tgc "gc_chr_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(100)" "" "0";
+      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(print(100))" "" "0";
     tgc "gc_concat_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(100)" "" "0"
+      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(print(100))" "" "0"
   ]
 ;;
 
@@ -2034,17 +2034,18 @@ let lambda_suite =
 let () =
   run_test_tt_main
     ( "all_tests"
-    >::: [ (* free_vars_suite;
-                   fvc_suite;
-                   pipeline_suite;
-                   graph_suite;
-                   interfere_suite;
-                   reg_alloc_suite;
-                   naive_alloc_suite;
-                   compile_aexpr_suite;
-                   integration_test_suite;
-                   compile_cexpr_suite lambda_suite;
-                   color_graph_suite;
-              gc_suite; *)
+    >::: [
+        (* free_vars_suite;
+           fvc_suite;
+           pipeline_suite;
+           graph_suite;
+           interfere_suite;
+           reg_alloc_suite;
+           naive_alloc_suite;
+           compile_aexpr_suite;
+           integration_test_suite;
+           compile_cexpr_suite lambda_suite;
+           color_graph_suite; *)
+              gc_suite;
            input_file_test_suite () ] )
 ;;
