@@ -189,40 +189,7 @@ void printHelp(FILE *out, SNAKEVAL val)
       char *str_addr = (char *)addr;
       for (uint64_t i = 8; i < len + 8; i++)
       {
-        if (str_addr[i] == '\\')
-        {
-          // if there wasn't a character after the slash, the program wouldn't have parsed.
-          switch (str_addr[i + 1])
-          {
-          case 'n':
-            fprintf(out, "\n");
-            break;
-          case 't':
-            fprintf(out, "\t");
-            break;
-          case 'b':
-            fprintf(out, "\b");
-            break;
-          case 'r':
-            fprintf(out, "\r");
-            break;
-          case '"':
-            fprintf(out, "\"");
-            break;
-          case '\\':
-            fprintf(out, "\\");
-            break;
-          default:
-            //????
-            fprintf(out, "unknown");
-            break;
-          }
-          i++;
-        }
-        else
-        {
-          fprintf(out, "%c", (char)(str_addr[i]));
-        }
+        fprintf(out, "%c", (char)(str_addr[i]));
       }
       fprintf(out, "\"");
       // Unmark this tuple: restore its length

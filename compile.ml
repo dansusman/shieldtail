@@ -1671,7 +1671,26 @@ and compile_cexpr
           IOr (Reg RAX, Const tuple_tag);
           IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
   | CString (s, (_, tag)) ->
-      let length = String.length s in
+      let rec get_char_codes chars =
+        match chars with
+        | [] -> []
+        | '\\' :: 'n' :: chars -> Char.code '\n' :: get_char_codes chars
+        | '\\' :: 't' :: chars -> Char.code '\t' :: get_char_codes chars
+        | '\\' :: 'b' :: chars -> Char.code '\b' :: get_char_codes chars
+        | '\\' :: 'r' :: chars -> Char.code '\r' :: get_char_codes chars
+        | '\\' :: '\"' :: chars -> Char.code '\"' :: get_char_codes chars
+        | '\\' :: '\\' :: chars -> Char.code '\\' :: get_char_codes chars
+        | '\\' :: c1 :: c2 :: c3 :: chars ->
+          (* convert characters to numbers, then make them into a number together *)
+            let num1, num2, num3 = (Char.code c1 - 48, Char.code c2 - 48, Char.code c3 - 48) in
+            let code = (num1 * 100) + (num2 * 10) + num3 in
+            printf "1: %d, 2: %d, 3: %d, c: %d\n" num1 num2 num3 code; code :: get_char_codes chars
+        | '\\' :: _ ->
+            raise (InternalCompilerError "a backslash with no valid trailing special code was found")
+        | c :: chars -> Char.code c :: get_char_codes chars
+      in
+      let char_codes = get_char_codes (List.of_seq (String.to_seq s)) in
+      let length = List.length char_codes in
       (* element count + (# letters)  *)
       let total_size = word_size + length in
       (* align to word_size *)
@@ -1691,16 +1710,18 @@ and compile_cexpr
         List.concat
           (List.mapi
              (fun i c ->
-               [ IMov (Reg scratch_reg, Const (Int64.of_int (Char.code c)));
+               [ IMov (Reg scratch_reg, Const (Int64.of_int c));
                  IMov (Sized (QWORD_PTR, RegOffset (i + word_size, heap_reg)), Reg scratch_reg) ] )
-             (List.of_seq (String.to_seq s)) )
+             char_codes )
       in
       let create_tup_val =
         [ IMov (Reg RAX, Reg heap_reg);
           IOr (Reg RAX, Const tuple_tag);
           IAdd (Reg heap_reg, Const (Int64.of_int aligned_total)) ]
       in
-      reserve aligned_total tag @ store_length @ char_moves @ create_tup_val
+      reserve aligned_total tag @ store_length
+      @ [ILineComment (sprintf "moving all the characters for the string \"%s\"" s)]
+      @ char_moves @ create_tup_val
   | CTuple (exprs, (_, tag)) ->
       let tup_size = List.length exprs in
       let store_length =
@@ -1873,7 +1894,7 @@ and compile_cexpr
       @ lambda_body @ reserve total_size tag @ closure_creation
   | CImmExpr imm -> [IMov (Reg RAX, compile_imm imm env lambda_tag)]
 
-and compile_imm (e: (neighborst * tag) immexpr) (env: arg name_envt tag_envt) (lambda_tag: tag) =
+and compile_imm (e : (neighborst * tag) immexpr) (env : arg name_envt tag_envt) (lambda_tag : tag) =
   match e with
   | ImmNum (n, _) -> Const (Int64.shift_left n 1)
   | ImmBool (true, _) -> const_true
