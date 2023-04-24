@@ -38,22 +38,23 @@
 
 # Testing
 
--   [ ] Make sure existing prim ops do/don't allow strings appropriately
+-   [x] Make sure existing prim ops do/don't allow strings appropriately - D
 
 # Presentation
 
 -   [x] write substantial documentation - D
 -   [x] Write down where each string operation in STRINGS.md lives within input/ dir - D
--   [ ] Write some agenda notes
+-   [x] Write some agenda notes
 -   [x] Highlight important design decisions (see DECISIONS.md) - D
 -   [x] Well-defined and Heavily Detailed README - D then J
         -- usage examples
         -- supported language features
         -- high-level description
         -- snake puns (maybe a snake starting with S?)
--   [ ] write lots of integration tests - J
--   [ ] revive test.ml - D
+-   [x] revive test.ml - D
+-   [ ] Investigate GC seg faults
 -   [ ] revive existing integration tests - J
+-   [ ] write new integration tests - J
 
 # Other Ideas
 
