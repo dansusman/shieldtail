@@ -17,9 +17,9 @@
     -   [x] split
     -   [x] comparison (but not defined as primops)
     -   [x] isPrefix
--   [ ] escape sequence printing
+-   [x] escape sequence printing
 -   [ ] write substantial documentation
--   [ ] test a bunch of random special characters via ascii code and direct usage
+-   [x] test a bunch of random special characters via ascii code and direct usage
 
 ## Compilation
 
