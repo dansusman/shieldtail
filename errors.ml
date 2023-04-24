@@ -29,6 +29,9 @@ exception LetRecNonFunction of sourcespan bind * sourcespan (* name binding, whe
 exception ShouldBeFunction of string * sourcespan (* name, where defined, actual typ *)
 
 exception
+  InvalidASCIICode of int * sourcespan (* the invalid ascii code given, and its string's location *)
+
+exception
   DeclArity of string * int * int * sourcespan (* name, num args, num types, where defined *)
 
 (* Stringifies a list of compilation errors *)
@@ -67,6 +70,8 @@ let print_errors (exns : exn list) : string list =
       | LetRecNonFunction (bind, loc) ->
           sprintf "Binding error at %s: Let-rec expected a name binding to a lambda; got %s"
             (string_of_sourcespan loc) (string_of_bind bind)
+      | InvalidASCIICode (code, loc) ->
+          sprintf "Invalid ASCII code %d found at <%s>" code (string_of_sourcespan loc)
       | _ -> sprintf "%s" (Printexc.to_string e) )
     exns
 ;;

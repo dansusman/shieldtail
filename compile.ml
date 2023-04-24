@@ -262,7 +262,21 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
   let rec wf_E e (env : scope_info name_envt) =
     debug_printf "In wf_E: %s\n" (ExtString.String.join ", " (env_keys env));
     match e with
-    | EString _ -> []
+    | EString (s, span) ->
+        let rec check_codes s =
+          match s with
+          | [] -> []
+          | '\\' :: ('n' | 'r' | 'b' | 't' | '\"' | '\\') :: chars -> check_codes chars
+          | '\\' :: c1 :: c2 :: c3 :: chars ->
+              (* Convert characters to numbers, then make them into a number together. Check that it's a valid ASCII code *)
+              let num1, num2, num3 = (Char.code c1 - 48, Char.code c2 - 48, Char.code c3 - 48) in
+              let code = (num1 * 100) + (num2 * 10) + num3 in
+              if code < 0 || code > 255
+              then InvalidASCIICode (code, span) :: check_codes chars
+              else check_codes chars
+          | _ :: chars -> check_codes chars
+        in
+        check_codes (List.of_seq (String.to_seq s))
     | ESeq (e1, e2, _) -> wf_E e1 env @ wf_E e2 env
     | ETuple (es, _) -> List.concat (List.map (fun e -> wf_E e env) es)
     | ESlice (str, s, en, step, _) ->
@@ -1681,10 +1695,10 @@ and compile_cexpr
         | '\\' :: '\"' :: chars -> Char.code '\"' :: get_char_codes chars
         | '\\' :: '\\' :: chars -> Char.code '\\' :: get_char_codes chars
         | '\\' :: c1 :: c2 :: c3 :: chars ->
-          (* convert characters to numbers, then make them into a number together *)
+            (* convert characters to numbers, then make them into a number together *)
             let num1, num2, num3 = (Char.code c1 - 48, Char.code c2 - 48, Char.code c3 - 48) in
             let code = (num1 * 100) + (num2 * 10) + num3 in
-            printf "1: %d, 2: %d, 3: %d, c: %d\n" num1 num2 num3 code; code :: get_char_codes chars
+            code :: get_char_codes chars
         | '\\' :: _ ->
             raise (InternalCompilerError "a backslash with no valid trailing special code was found")
         | c :: chars -> Char.code c :: get_char_codes chars

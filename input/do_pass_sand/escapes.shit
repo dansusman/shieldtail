@@ -1,9 +1,9 @@
 print("\"these tests are visual only (because they contain some untypable characters)\"");
 print("\n");
-print("\r");
 print("\t");
 print("12\b3");
 print("\\");
 print("\097");
 print("\044");
-"\096"
+print("\096");
+"\1234"

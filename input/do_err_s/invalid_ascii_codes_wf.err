@@ -1,0 +1,2 @@
+Invalid ASCII code 256 found at <do_err/invalid_ascii_codes_wf, 1:0-1:6>
+Invalid ASCII code 999 found at <do_err/invalid_ascii_codes_wf, 2:0-2:6>
