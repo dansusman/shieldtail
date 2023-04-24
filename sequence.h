@@ -89,7 +89,7 @@ uint64_t intToChar(SNAKEVAL num, uint64_t *alloc_ptr, uint64_t *cur_frame, uint6
 
     Errors with ERR_ORD_NOT_CHAR if `chr' is not a valid ASCII character.
 
-    Assembly alias: `chr'
+    Assembly alias: `ord'
 
     Arguments:
         chr: the character to convert to a ASCII code number
