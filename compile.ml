@@ -1889,7 +1889,6 @@ and compile_cexpr
             IAdd (Reg RAX, HexConst closure_tag);
             IAdd (Reg heap_reg, Const (Int64.of_int total_size)) ]
         in
-        (* preload_recursive@ *)
         [ IInstrComment
             ( IMov (Sized (QWORD_PTR, RegOffset (0, heap_reg)), Const (Int64.of_int arity)),
               "load arity" );
