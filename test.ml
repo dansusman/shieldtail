@@ -855,7 +855,6 @@ let oom =
     tgc "oomgc3" (8 + builtins_size) "(1, (3, 4))" "" "(1, (3, 4))";
     tgc "oomgc4" (4 + builtins_size) "(3, 4)" "" "(3, 4)";
     tgcerr "oomgc5" (4 + builtins_size) "(1, 2, 3, 4, 5, 6, 7, 8, 9, 0)" "" "Out of memory";
-    (* TODO could come back and fix this*)
     tgcerr "gc_tuple_but_full" builtins_size "(1, 2)" "" "Out of memory";
     tgcerr "gc_lambda_but_full" (3 + builtins_size) "(lambda (x): x)" "" "Out of memory";
     tgcerr "gc_lambda_in_tup_but_full" (11 + builtins_size)
@@ -895,11 +894,19 @@ let gc =
 
 let string_gc =
   [ tgc "gc_string_simple" (4 + builtins_size) "\"hello, world\"" "" "\"hello, world\"";
+    tgc "gc_concat" (4 + builtins_size) "\"hello, \" ^ \"world\"" "" "\"hello, world\"";
+    tgc "gc_numToString" (4 + builtins_size) "numToString(3423432434)" "" "\"3423432434\"";
+    tgc "gc_slice" (4 + builtins_size) "\"hello\"[1:4:1]" "" "\"ell\"";
     tgc "gc_string_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0" ]
+      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0";
+    tgc "gc_charAt_stress" (8 + builtins_size)
+      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(100)" "" "0";
+    tgc "gc_chr_stress" (8 + builtins_size)
+      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(100)" "" "0";
+    tgc "gc_concat_stress" (8 + builtins_size)
+      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(100)" "" "0"
+  ]
 ;;
-
-(* TODO test churn with concatenation *)
 
 let gc_suite = "gc_suite" >::: oom @ gc @ string_gc
 
@@ -986,28 +993,37 @@ let compile_cexpr_suite =
            [ IMov (Reg RAX, HexConst (-1L));
              IAnd (Reg RAX, HexConst 7L);
              ICmp (Reg RAX, Const 7L);
-             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
-             IJe (Label "is_bool_2");
              IMov (Reg RAX, HexConst 0x7fffffffffffffffL);
+             IJne (Label "is_bool_2");
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
              ILabel "is_bool_2" ];
          t_asm "compile_is_num"
            (compile_cexpr (free_vars_C (CPrim1 (IsNum, ImmNum (2L, 1), 2))) [] 1 "")
            [ IMov (Reg RAX, Const 4L);
              IAnd (Reg RAX, HexConst 1L);
              ICmp (Reg RAX, Const 0L);
-             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
-             IJe (Label "is_num_2");
              IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             IJne (Label "is_num_2");
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
              ILabel "is_num_2" ];
          t_asm "compile_is_tup"
            (compile_cexpr (free_vars_C (CPrim1 (IsTuple, ImmBool (false, 1), 2))) [] 1 "")
            [ IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
              IAnd (Reg RAX, HexConst 7L);
              ICmp (Reg RAX, Const 1L);
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             IJne (Label "is_seq_2");
+             IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
+             IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
+             ISub (Reg RAX, Const 1L);
+             IMov (Reg RAX, RegOffset (0, RAX));
+             IAnd (Reg RAX, HexConst 1L);
+             ICmp (Reg RAX, Const 0L);
              IMov (Reg RAX, HexConst 0xFFFFFFFFFFFFFFFFL);
              IJe (Label "is_tup_2");
              IMov (Reg RAX, HexConst 0x7FFFFFFFFFFFFFFFL);
-             ILabel "is_tup_2" ];
+             ILabel "is_tup_2";
+             ILabel "is_seq_2" ];
          t_asm "compile_add1"
            (compile_cexpr (free_vars_C (CPrim1 (Add1, ImmNum (5L, 2), 1))) [] 1 "")
            [ IMov (Reg RAX, Const 10L);
@@ -1952,26 +1968,22 @@ let test_prog =
 ;;
 
 let input_tests =
-  [ t "input1" "let x = input() in x + 2" "123" "125";
+  [ t "input1" "let x = input() in fromString(x) + 2" "123" "125";
     t "input_echo_false" "input()" "false" "false";
     t "input_echo_3" "input()" "3" "3";
     t "input_echo_-72" "input()" "-72" "-72";
-    t "input_multiple_inputs" "(input() + 1, !(input()), 3 * input())" "3\ntrue\n-16"
+    t "input_multiple_inputs"
+      "(fromString(input()) + 1, !(fromString(input())), 3 * fromString(input()))" "3\ntrue\n-16"
       "(4, false, -48)";
-    t "input_nested_input" "def id(x): x\nid(let x = 12 in (2, input()))" "8" "(2, 8)";
-    t "input_input_used_twice" "let x = input() in (x + 1, x + 2)" "3" "(4, 5)";
-    t "input_almost_overflow" "input() - 4611686018427387903" "4611686018427387903" "0";
-    terr "input_overflow_positive" "input()" "4611686018427387904"
-      "overflow, got -4611686018427387904";
-    terr "input_overflow_negative" "input()" "-4611686018427387905"
-      "overflow, got 4611686018427387903";
-    terr "input_tuple" "input()" "(1, 2)"
-      "Error 1: Illegal input (only a single number or bool expected)";
-    terr "input_string" "input()" "nil"
-      "Error 1: Illegal input (only a single number or bool expected)";
-    t "input_almost_num1" "input()" "1234S" "1234";
-    terr "input_almost_num2" "input()" "S1234"
-      "Error 1: Illegal input (only a single number or bool expected)" ]
+    t "input_nested_input" "def id(x): x\nid(let x = 12 in (2, input()))" "8" "(2, \"8\")";
+    t "input_input_used_twice" "let x = fromString(input()) in (x + 1, x + 2)" "3" "(4, 5)";
+    t "input_almost_overflow" "fromString(input()) - 4611686018427387903" "4611686018427387903" "0";
+    t "input_overflow_positive" "input()" "4611686018427387904" "4611686018427387904";
+    t "input_overflow_negative" "input()" "-4611686018427387905" "-4611686018427387905";
+    t "input_tuple" "input()" "(1, 2)" "(1, 2)";
+    t "input_string" "input()" "nil" "nil";
+    t "input_almost_num1" "input()" "1234S" "1234S";
+    t "input_almost_num2" "input()" "S1234" "S1234" ]
 ;;
 
 let integration_test_suite =
@@ -2023,17 +2035,16 @@ let () =
   run_test_tt_main
     ( "all_tests"
     >::: [ (* free_vars_suite;
-               fvc_suite;
-               pipeline_suite;
-               graph_suite;
-               interfere_suite;
-               reg_alloc_suite;
-               naive_alloc_suite;
-               compile_aexpr_suite;
-               integration_test_suite;
-               gc_suite;
-               compile_cexpr_suite;
-               lambda_suite;
-               color_graph_suite; *)
-           input_file_test_suite () (* gc_suite *) ] )
+                fvc_suite;
+                pipeline_suite;
+                graph_suite;
+                interfere_suite;
+                reg_alloc_suite;
+                naive_alloc_suite;
+                compile_aexpr_suite;
+                integration_test_suite;
+                compile_cexpr_suite lambda_suite;
+                color_graph_suite;
+                input_file_test_suite () *)
+           gc_suite ] )
 ;;
