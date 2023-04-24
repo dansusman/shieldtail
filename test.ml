@@ -2043,7 +2043,8 @@ let () =
            naive_alloc_suite;
            compile_aexpr_suite;
            integration_test_suite;
-           compile_cexpr_suite lambda_suite;
+           compile_cexpr_suite;
+           lambda_suite;
            color_graph_suite;
            gc_suite;
            input_file_test_suite () ] )
