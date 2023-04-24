@@ -57,6 +57,7 @@ and 'a expr =
   | EGetItem of 'a expr * 'a expr * 'a
   | ESetItem of 'a expr * 'a expr * 'a expr * 'a
   | ELet of 'a binding list * 'a expr * 'a
+  | EInput of 'a
   | EPrim1 of prim1 * 'a expr * 'a
   | EPrim2 of prim2 * 'a expr * 'a expr * 'a
   | EIf of 'a expr * 'a expr * 'a expr * 'a
@@ -83,6 +84,7 @@ type 'a immexpr =
 and 'a cexpr =
   (* compound expressions *)
   | CIf of 'a immexpr * 'a aexpr * 'a aexpr * 'a
+  | CInput of 'a
   | CPrim1 of prim1 * 'a immexpr * 'a
   | CPrim2 of prim2 * 'a immexpr * 'a immexpr * 'a
   | CApp of 'a immexpr * 'a immexpr list * call_type * 'a
@@ -117,6 +119,7 @@ let get_tag_E e =
   match e with
   | ELet (_, _, t) -> t
   | ELetRec (_, _, t) -> t
+  | EInput t -> t
   | EPrim1 (_, _, t) -> t
   | EPrim2 (_, _, _, t) -> t
   | EIf (_, _, _, t) -> t
@@ -158,6 +161,7 @@ let rec map_tag_E (f : 'a -> 'b) (e : 'a expr) =
   | ENumber (n, a) -> ENumber (n, f a)
   | EBool (b, a) -> EBool (b, f a)
   | ENil a -> ENil (f a)
+  | EInput a -> EInput (f a)
   | EPrim1 (op, e, a) ->
       let tag_prim = f a in
       EPrim1 (op, map_tag_E f e, tag_prim)
@@ -272,6 +276,7 @@ and untagE e =
   | ENumber (n, _) -> ENumber (n, ())
   | EBool (b, _) -> EBool (b, ())
   | ENil _ -> ENil ()
+  | EInput _ -> EInput ()
   | EPrim1 (op, e, _) -> EPrim1 (op, untagE e, ())
   | EPrim2 (op, e1, e2, _) -> EPrim2 (op, untagE e1, untagE e2, ())
   | ELet (binds, body, _) ->
@@ -313,6 +318,9 @@ let atag (p : 'a aprogram) : tag aprogram =
     | ACExpr c -> ACExpr (helpC c)
   and helpC (c : 'a cexpr) : tag cexpr =
     match c with
+    | CInput _ ->
+        let input_tag = tag () in
+        CInput input_tag
     | CPrim1 (op, e, _) ->
         let prim_tag = tag () in
         CPrim1 (op, helpI e, prim_tag)
@@ -372,6 +380,7 @@ let rec fvs_to_list (prog : (StringSet.t * tag) aprogram) : (string list * tag) 
     | ACExpr x -> ACExpr (helpC x)
   and helpC (c : (StringSet.t * tag) cexpr) : (string list * tag) cexpr =
     match c with
+    | CInput (fvs, tag) -> CInput (StringSet.elements fvs, tag)
     | CPrim1 (op, e, (fvs, tag)) -> CPrim1 (op, helpI e, (StringSet.elements fvs, tag))
     | CPrim2 (op, l, r, (fvs, tag)) -> CPrim2 (op, helpI l, helpI r, (StringSet.elements fvs, tag))
     | CIf (c, t, f, (fvs, tag)) -> CIf (helpI c, helpA t, helpA f, (StringSet.elements fvs, tag))
@@ -379,7 +388,12 @@ let rec fvs_to_list (prog : (StringSet.t * tag) aprogram) : (string list * tag) 
         CApp (helpI f, List.map helpI args, call_type, (StringSet.elements fvs, tag))
     | CTuple (elems, (fvs, tag)) -> CTuple (List.map helpI elems, (StringSet.elements fvs, tag))
     | CSlice (str, s, e, step, (fvs, tag)) ->
-        CSlice (helpI str, Option.map helpI s, Option.map helpI e, Option.map helpI step, (StringSet.elements fvs, tag))
+        CSlice
+          ( helpI str,
+            Option.map helpI s,
+            Option.map helpI e,
+            Option.map helpI step,
+            (StringSet.elements fvs, tag) )
     | CGetItem (t, i, (fvs, tag)) -> CGetItem (helpI t, helpI i, (StringSet.elements fvs, tag))
     | CSetItem (t, i, e, (fvs, tag)) ->
         CSetItem (helpI t, helpI i, helpI e, (StringSet.elements fvs, tag))

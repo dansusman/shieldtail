@@ -1,0 +1,4 @@
+print(input());
+print(input());
+print(fromString(input()));
+fromString(input())

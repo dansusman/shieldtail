@@ -9,7 +9,7 @@ let tok_span(start, endtok) = (Parsing.rhs_start_pos start, Parsing.rhs_end_pos 
 %token <int64> NUM
 %token <string> ID
 %token <string> STRING
-%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LET IN EQUAL COMMA CONCAT PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINT PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE ISSTRING CHR NUMTOSTRING EQEQ LESSSPACE GREATER LESSEQ GREATEREQ AND OR NOT COLONEQ SEMI NIL LAMBDA BEGIN END SHADOW REC UNDERSCORE
+%token DEF ANDDEF ADD1 SUB1 LPARENSPACE LPARENNOSPACE RPAREN LBRACK RBRACK LET IN EQUAL COMMA CONCAT PLUS MINUS TIMES IF COLON ELSECOLON EOF PRINT INPUT PRINTSTACK TRUE FALSE ISBOOL ISNUM ISTUPLE ISSTRING CHR NUMTOSTRING EQEQ LESSSPACE GREATER LESSEQ GREATEREQ AND OR NOT COLONEQ SEMI NIL LAMBDA BEGIN END SHADOW REC UNDERSCORE
 
 %right SEMI
 %left COLON COLONEQ
@@ -102,6 +102,7 @@ binop_operand :
   // Tuples
   | tuple_expr { $1 }
   | binop_operand LBRACK expr RBRACK { EGetItem($1, $3, full_span()) }
+  // Tuple slicing
   | binop_operand LBRACK expr COLON expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), Some($7), full_span()) } // t[s:e:st]
   | binop_operand LBRACK expr COLON expr COLON RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) } // t[s:e:]
   | binop_operand LBRACK expr COLON expr RBRACK { ESlice($1, Some($3), Some($5), None, full_span()) } // t[s:e]
@@ -117,6 +118,7 @@ binop_operand :
   // Function calls
   | binop_operand LPARENNOSPACE exprs RPAREN %prec LPARENNOSPACE { EApp($1, $3, Unknown, full_span()) }
   | binop_operand LPARENNOSPACE RPAREN %prec LPARENNOSPACE { EApp($1, [], Unknown, full_span()) }
+  | INPUT LPARENNOSPACE RPAREN { EInput(full_span()) }
   // Parentheses
   | LPARENSPACE expr RPAREN { $2 }
   | LPARENNOSPACE expr RPAREN { $2 }

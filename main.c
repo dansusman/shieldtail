@@ -325,36 +325,32 @@ SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args)
   return val;
 }
 
-SNAKEVAL input()
+SNAKEVAL input(uint64_t *alloc_ptr, uint64_t *cur_frame, uint64_t *cur_stack_top)
 {
-  char buffer[50];
-  fgets(buffer, 50, stdin);
-  if (strncmp(buffer, "true", 4) == 0)
-  {
-    return BOOL_TRUE;
-  }
-  else if (strncmp(buffer, "false", 5) == 0)
-  {
-    return BOOL_FALSE;
-  }
+  char buffer[500];
+  fgets(buffer, 500, stdin);
 
-  int64_t read_num;
-  int code = sscanf(buffer, "%ld", &read_num);
+  uint64_t length_of_result = strlen(buffer);
+  if (buffer[length_of_result - 1] == '\n')
+    length_of_result--;
 
-  if (code == 0)
+  uint64_t total_machine_size = 1 + letters_to_words(length_of_result);
+  total_machine_size += total_machine_size % 2 == 0 ? 0 : 1;
+
+  uint64_t *new_heap = alloc_ptr;
+
+  // do GC and get a new heap pointer if needed
+  if (HEAP_END - alloc_ptr < total_machine_size)
   {
-    fprintf(stderr, "Illegal input (only a single number or bool expected)\n");
-    exit(1);
+    new_heap = try_gc(alloc_ptr, total_machine_size, cur_frame, cur_stack_top);
   }
 
-  if ((read_num > (LONG_MAX / 2)) || (read_num < (LONG_MIN / 2)))
-  {
-    error(ERR_OVERFLOW, read_num * 2);
-  }
+  // store the new string size
+  new_heap[0] = (length_of_result * 2) + STRING_HEAP_TAG;
 
-  SNAKEVAL read_val = (SNAKEVAL)(read_num * 2);
-
-  return read_val;
+  memcpy(&new_heap[1], buffer, total_machine_size * 8);
+  // return what the heap pointer should be after this allocation
+  return new_heap + total_machine_size;
 }
 
 SNAKEVAL print(SNAKEVAL val)

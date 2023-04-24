@@ -119,6 +119,7 @@ and string_of_expr_with (depth : int) (print_a : 'a -> string) (e : 'a expr) : s
     | EBool (b, a) -> string_of_bool b ^ print_a a
     | ENil a -> "nil " ^ print_a a
     | EId (x, a) -> x ^ print_a a
+    | EInput a -> "input() " ^ print_a a
     | EPrim1 (op, e, a) -> sprintf "%s(%s)%s" (string_of_op1 op) (string_of_expr e) (print_a a)
     | EPrim2 (op, left, right, a) ->
         sprintf "(%s %s %s)%s" (string_of_expr left) (string_of_op2 op) (string_of_expr right)
@@ -221,6 +222,7 @@ and string_of_cexpr_with (depth : int) (print_a : 'a -> string) (c : 'a cexpr) :
     | CSetItem (e, idx, newval, a) ->
         sprintf "%s[%s] := %s %s" (string_of_immexpr e) (string_of_immexpr idx)
           (string_of_immexpr newval) (print_a a)
+    | CInput a -> sprintf "input()%s" (print_a a)
     | CPrim1 (op, e, a) -> sprintf "%s(%s)%s" (string_of_op1 op) (string_of_immexpr e) (print_a a)
     | CPrim2 (op, left, right, a) ->
         sprintf "(%s %s %s)%s" (string_of_immexpr left) (string_of_op2 op) (string_of_immexpr right)
@@ -382,6 +384,9 @@ let rec format_expr (fmt : Format.formatter) (print_a : 'a -> string) (e : 'a ex
   | EId (x, a) ->
       open_label fmt "EId" (print_a a);
       pp_print_string fmt (quote x);
+      close_paren fmt
+  | EInput a ->
+      open_label fmt "EInput" (print_a a);
       close_paren fmt
   | EPrim1 (op, e, a) ->
       open_label fmt "EPrim1" (print_a a);

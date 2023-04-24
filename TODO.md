@@ -56,5 +56,5 @@
 
 # Other Ideas
 
--   [ ] Support strings as input
+-   [x] Support strings as input
 -   [ ] Support Comments (syntax: "~", "`", "--", ",", etc.)

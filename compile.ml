@@ -281,6 +281,7 @@ let is_well_formed (p : sourcespan program) : sourcespan program fallible =
         then [Overflow (n, loc)]
         else []
     | EId (x, loc) -> if find_one (List.map fst env) x then [] else [UnboundId (x, loc)]
+    | EInput _ -> []
     | EPrim1 (_, e, _) -> wf_E e env
     | EPrim2 (_, l, r, _) -> wf_E l env @ wf_E r env
     | EIf (c, t, f, _) -> wf_E c env @ wf_E t env @ wf_E f env
@@ -586,6 +587,7 @@ let desugar (p : sourcespan program) : sourcespan program =
     | ENumber (n, tag) -> ENumber (n, tag)
     | EBool (b, tag) -> EBool (b, tag)
     | ENil (t, tag) -> ENil (t, tag)
+    | EInput t -> EInput t
     | EPrim1 (op, e, tag) -> EPrim1 (op, helpE e, tag)
     | EPrim2 (op, l, r, info) -> (
         (* Desugaring AND and OR seems to mess with error messages for non-boolean values.
@@ -627,7 +629,7 @@ let desugar (p : sourcespan program) : sourcespan program =
 
 (* Returns the stack-index (in words) of the deepest stack index used for any
    of the variables in this expression *)
-let rec deepest_stack e env =
+let rec deepest_stack (e : 'a aexpr) (env : arg name_envt) : tag =
   let rec helpA e =
     match e with
     | ALet (name, bind, body, _) ->
@@ -639,6 +641,7 @@ let rec deepest_stack e env =
   and helpC e =
     match e with
     | CIf (c, t, f, _) -> List.fold_left max 0 [helpI c; helpA t; helpA f]
+    | CInput _ -> 0
     | CPrim1 (_, i, _) -> helpI i
     | CPrim2 (_, i1, i2, _) -> max (helpI i1) (helpI i2)
     | CApp (_, args, _, _) -> List.fold_left max 0 (List.map helpI args)
@@ -715,6 +718,7 @@ let rename_and_tag (p : tag program) : tag program =
             tag )
     | EGetItem (e, idx, tag) -> EGetItem (helpE env e, helpE env idx, tag)
     | ESetItem (e, idx, newval, tag) -> ESetItem (helpE env e, helpE env idx, helpE env newval, tag)
+    | EInput _ -> e
     | EPrim1 (op, arg, tag) -> EPrim1 (op, helpE env arg, tag)
     | EPrim2 (op, left, right, tag) -> EPrim2 (op, helpE env left, helpE env right, tag)
     | EIf (c, t, f, tag) -> EIf (helpE env c, helpE env t, helpE env f, tag)
@@ -771,6 +775,7 @@ let anf (p : tag program) : unit aprogram =
     | Program _ -> raise (InternalCompilerError "decls should have been desugared away")
   and helpC (e : tag expr) : unit cexpr * unit anf_bind list =
     match e with
+    | EInput _ -> (CInput (), [])
     | EPrim1 (op, arg, _) ->
         let arg_imm, arg_setup = helpI arg in
         (CPrim1 (op, arg_imm, ()), arg_setup)
@@ -887,6 +892,9 @@ let anf (p : tag program) : unit aprogram =
         ( ImmId (tmp, ()),
           tup_setup @ idx_setup @ new_setup @ [BLet (tmp, CSetItem (tup_imm, idx_imm, new_imm, ()))]
         )
+    | EInput tag ->
+        let tmp = sprintf "input_%d" tag in
+        (ImmId (tmp, ()), [BLet (tmp, CInput ())])
     | EPrim1 (op, arg, tag) ->
         let tmp = sprintf "unary_%d" tag in
         let arg_imm, arg_setup = helpI arg in
@@ -976,6 +984,7 @@ let free_vars (e : 'a aexpr) : StringSet.t =
         let t_free = free_vars_A t bound in
         let e_free = free_vars_A e bound in
         StringSet.union (StringSet.union c_free t_free) e_free
+    | CInput _ -> StringSet.empty
     | CPrim1 (_, op, _) -> free_vars_I op bound
     | CPrim2 (_, op1, op2, _) ->
         let op1_free = free_vars_I op1 bound in
@@ -1050,6 +1059,7 @@ let get_fv_info (e : 'a aexpr) : StringSet.t =
     match c with
     | CIf (_, _, _, (fvs, _))
      |CLambda (_, _, (fvs, _))
+     |CInput (fvs, _)
      |CPrim1 (_, _, (fvs, _))
      |CPrim2 (_, _, _, (fvs, _))
      |CApp (_, _, _, (fvs, _))
@@ -1071,6 +1081,7 @@ let rec free_vars_C (e : 'a cexpr) : (StringSet.t * 'a) cexpr =
       let t_free = free_vars_A t in
       let e_free = free_vars_A e in
       CIf (c_free, t_free, e_free, (free_vars e, tag))
+  | CInput tag -> CInput (free_vars (ACExpr e), tag)
   | CPrim1 (p, op, tag) -> CPrim1 (p, free_vars_I op, (free_vars (ACExpr e), tag))
   | CPrim2 (p, op1, op2, tag) ->
       let op1_free = free_vars_I op1 in
@@ -1452,6 +1463,12 @@ and compile_cexpr
   let check_closure (imm : arg) (dest : string) = check_tag imm closure_tag_mask closure_tag dest in
   let check_overflow = [IJo (Label "?err_overflow")] in
   match e with
+  | CInput _ ->
+      native_call (Label "input") [Reg heap_reg; Reg RBP; Reg RSP]
+      @ [ IInstrComment (IMov (Reg scratch_reg, Reg RAX), "save new heap pointer to scratch");
+          IMov (Reg RAX, Reg heap_reg);
+          IOr (Reg RAX, Const tuple_tag);
+          IInstrComment (IMov (Reg heap_reg, Reg scratch_reg), "update heap pointer") ]
   | CPrim1 (op, e, (_, tag)) -> (
       let e_reg = compile_imm e env lambda_tag in
       let predicate_prim1_instrs (label : string) (mask : int64) (tag : int64) : instruction list =
@@ -1856,7 +1873,7 @@ and compile_cexpr
       @ lambda_body @ reserve total_size tag @ closure_creation
   | CImmExpr imm -> [IMov (Reg RAX, compile_imm imm env lambda_tag)]
 
-and compile_imm e env lambda_tag =
+and compile_imm (e: (neighborst * tag) immexpr) (env: arg name_envt tag_envt) (lambda_tag: tag) =
   match e with
   | ImmNum (n, _) -> Const (Int64.shift_left n 1)
   | ImmBool (true, _) -> const_true
@@ -1886,17 +1903,17 @@ and native_call label args =
   let padding_needed = num_stack_args mod 2 <> 0 in
   let setup =
     ( if padding_needed
-      then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
-      else [] )
+    then [IInstrComment (IPush (Sized (QWORD_PTR, Const 0L)), "Padding to 16-byte alignment")]
+    else [] )
     @ args_help args first_six_args_registers
   in
   let teardown =
     ( if num_stack_args = 0
-      then []
-      else
-        [ IInstrComment
-            ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
-              sprintf "Popping %d arguments" num_stack_args ) ] )
+    then []
+    else
+      [ IInstrComment
+          ( IAdd (Reg RSP, Const (Int64.of_int (word_size * num_stack_args))),
+            sprintf "Popping %d arguments" num_stack_args ) ] )
     @
     if padding_needed
     then [IInstrComment (IAdd (Reg RSP, Const (Int64.of_int word_size)), "Unpadding one word")]
