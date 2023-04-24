@@ -10,7 +10,7 @@
 -   string slicing (like Python) (e.g. `"hello"[0:3:]`)
 -   `fromString(val)`
 
-## String Library 1
+## [String Library 1](./strings.shit)
 
 -   string comparison (`strLt(str1, str2)`, `strGt(str1, str2)`, `strLte(str1, str2)`, `strGte(str1, str2)`, `compare(str1, str2)`)
 -   `isPrefix(str, prefix)`
@@ -18,17 +18,17 @@
 -   `indexOf(string, element)`
 -   `contains(str, element)`
 
-## String Library 2
+## [String Library 2](./strings2.shit)
 
 -   `toLowercase(str)`, `isLowercase(str)`
 -   `toUppercase(str)`, `isUppercase(str)`
 -   `isAlpha(str)`, `isNumeric(str)`, `isAlphanumeric(str)`
 -   `equalsIgnoreCase(str1, str2)`
 
-## String Library 3
+## [String Library 3](./strings3.shit)
 
 -   conversion between tuples and strings (`implode(tuple)`, `explode(string)`)
 
-## String Library 4
+## [String Library 4](./strings4.shit)
 
 -   `toString(val)`
