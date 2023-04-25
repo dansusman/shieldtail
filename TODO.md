@@ -52,9 +52,9 @@
         -- high-level description
         -- snake puns (maybe a snake starting with S?)
 -   [x] revive test.ml - D
--   [ ] Investigate GC seg faults
--   [ ] revive existing integration tests - J
--   [ ] write new integration tests - J
+-   [x] Investigate GC seg faults
+-   [x] revive existing integration tests - J
+-   [x] write new integration tests - J
 
 # Other Ideas
 
