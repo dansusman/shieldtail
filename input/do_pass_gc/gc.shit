@@ -1,0 +1,6 @@
+def churn(n):
+    if n == 0: 0
+    else: "hello" ^ "world";
+    churn(sub1(n))
+
+churn(print(3))

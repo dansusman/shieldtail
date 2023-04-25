@@ -25,8 +25,11 @@ let ta name program input expected =
   name >:: test_run_anf ~args:[] ~std_input:input program name expected
 ;;
 
-let tgc ?(alloc = alloc_strat) name heap_size program input expected =
-  name >:: test_run ~args:[string_of_int heap_size] ~std_input:input alloc program name expected
+let tgc ?(alloc = alloc_strat) ?(no_builtins = false) name heap_size program input expected =
+  name
+  >:: test_run
+        ~args:[string_of_int heap_size]
+        ~no_builtins ~std_input:input alloc program name expected
 ;;
 
 let tvg ?(alloc = alloc_strat) name program input expected =
@@ -894,18 +897,19 @@ let gc =
 
 let string_gc =
   [ tgc "gc_string_simple" (4 + builtins_size) "\"hello, world\"" "" "\"hello, world\"";
-    tgc "gc_concat" (4 + builtins_size) "\"hello, \" ^ \"world\"" "" "\"hello, world\"";
+    tgc "gc_concat" (4 + builtins_size) ~no_builtins:true "\"hello, \" ^ \"world\"" ""
+      "\"hello, world\"";
     tgc "gc_numToString" (4 + builtins_size) "numToString(3423432434)" "" "\"3423432434\"";
     tgc "gc_slice" (4 + builtins_size) "\"hello\"[1:4:1]" "" "\"ell\"";
     tgc "gc_string_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(100)" "" "0";
-    tgc "gc_charAt_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(100)" "" "0";
+      "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(print(100))" "" "0";
+    tgc "gc_charAt_stress" (8 + builtins_size) ~no_builtins:true
+      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(print(100))" "" "0";
     tgc "gc_chr_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(100)" "" "0";
-    tgc "gc_concat_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(100)" "" "0"
-  ]
+      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(print(100))" "" "0";
+    tgc "gc_concat_stress" (8 + builtins_size) ~no_builtins:true
+      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(print(100))"
+      "" "0" ]
 ;;
 
 let gc_suite = "gc_suite" >::: oom @ gc @ string_gc
@@ -2046,6 +2050,7 @@ let () =
            compile_cexpr_suite;
            lambda_suite;
            color_graph_suite;
+
            gc_suite;
            input_file_test_suite () ] )
 ;;
