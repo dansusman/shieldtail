@@ -2038,17 +2038,19 @@ let lambda_suite =
 let () =
   run_test_tt_main
     ( "all_tests"
-    >::: [ (* free_vars_suite;
-              fvc_suite;
-              pipeline_suite;
-              graph_suite;
-              interfere_suite;
-              reg_alloc_suite;
-              naive_alloc_suite;
-              compile_aexpr_suite;
-              integration_test_suite;
-              compile_cexpr_suite lambda_suite;
-              color_graph_suite; *)
+    >::: [ free_vars_suite;
+           fvc_suite;
+           pipeline_suite;
+           graph_suite;
+           interfere_suite;
+           reg_alloc_suite;
+           naive_alloc_suite;
+           compile_aexpr_suite;
+           integration_test_suite;
+           compile_cexpr_suite;
+           lambda_suite;
+           color_graph_suite;
+
            gc_suite;
            input_file_test_suite () ] )
 ;;
