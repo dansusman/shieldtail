@@ -132,8 +132,6 @@ binop_operand :
   | const { $1 }
   | id { $1 }
   | INPUT LPARENNOSPACE RPAREN { EInput(full_span()) }
-  | INPUT { EApp(EId("input", full_span()), [], Native, full_span()) }
-
 
 decl :
   | DEF ID LPARENNOSPACE RPAREN COLON expr { DFun($2, [], $6, full_span()) }

@@ -13,7 +13,7 @@
 typedef uint64_t SNAKEVAL;
 
 void printHelp(FILE *out, SNAKEVAL val);
-SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("?print_stack");
+SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("print_stack");
 extern uint64_t NUM_TAG_MASK;
 extern uint64_t CLOSURE_TAG_MASK;
 extern uint64_t TUPLE_TAG_MASK;

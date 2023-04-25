@@ -8,21 +8,11 @@ open Graph
 module StringSet = Set.Make (String)
 
 let c_global_function_names =
-  [ "input";
-    "print";
-    "equal";
-    "error";
-    "print_stack";
-    "len";
-    "chr";
-    "ord";
-    "numToString";
-    "fromString" ]
+  ["print"; "equal"; "error"; "print_stack"; "len"; "chr"; "ord"; "numToString"; "fromString"]
 ;;
 
 let c_global_function_arities =
-  [ ("input", 0);
-    ("print", 1);
+  [ ("print", 1);
     ("equal", 2);
     ("error", 2);
     ("print_stack", 1);
@@ -31,6 +21,24 @@ let c_global_function_arities =
     ("ord", 1);
     ("numToString", 1);
     ("fromString", 1) ]
+;;
+
+let native_fun_bindings =
+  [ ("print", 1);
+    ("equal", 2);
+    ("error", 2);
+    ("print_stack", 1);
+    ("len", 1);
+    ("chr", 1);
+    ("ord", 1);
+    ("numToString", 1);
+    ("fromString", 1) ]
+;;
+
+let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
+
+let initial_fun_env =
+  List.map (fun (name, arity) -> (name, (dummy_span, Some arity, Some arity))) native_fun_bindings
 ;;
 
 type 'a name_envt = (string * 'a) list
@@ -124,8 +132,6 @@ let err_FROM_STR_NOT_STR = 27L
 
 let err_FROM_STR_INVALID = 28L
 
-let dummy_span = (Lexing.dummy_pos, Lexing.dummy_pos)
-
 let first_six_args_registers = [RDI; RSI; RDX; RCX; R8; R9]
 
 let caller_saved_regs : arg list = [Reg RDI; Reg RSI; Reg RDX; Reg RCX; Reg R8; Reg R9; Reg R10]
@@ -155,25 +161,6 @@ let scratch_reg = R11
 
 (* you can add any functions or data defined by the runtime here for future use *)
 let initial_val_env = []
-
-let prim_bindings = []
-
-let native_fun_bindings =
-  [ ("equal", 2);
-    ("input", 0);
-    ("len", 1);
-    ("chr", 1);
-    ("ord", 1);
-    ("numToString", 1);
-    ("fromString", 1) ]
-;;
-
-let initial_fun_env =
-  prim_bindings
-  @ List.map (fun (name, arity) -> (name, (dummy_span, Some arity, Some arity))) native_fun_bindings
-;;
-
-(* You may find some of these helpers useful *)
 
 let rec find ls x =
   match ls with
@@ -1557,8 +1544,8 @@ and compile_cexpr
           @ [ IMov (Reg RAX, e_reg);
               IMov (Reg scratch_reg, bool_mask);
               IXor (Reg RAX, Reg scratch_reg) ]
-      | Print -> native_call (Label "?print") [e_reg]
-      | PrintStack -> native_call (Label "?print_stack") [e_reg; Reg RSP; Reg RBP; Const (-1L)] )
+      | Print -> native_call (Label "print") [e_reg]
+      | PrintStack -> native_call (Label "print_stack") [e_reg; Reg RSP; Reg RBP; Const (-1L)] )
   | CPrim2 (op, left, right, (_, tag)) -> (
       let c_left = compile_imm left env lambda_tag in
       let c_right = compile_imm right env lambda_tag in
@@ -2014,10 +2001,10 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
   let prelude =
     "default rel\n\
      section .text\n\
-     extern ?error\n\
+     extern error\n\
      extern input\n\
-     extern ?print\n\
-     extern ?print_stack\n\
+     extern print\n\
+     extern print_stack\n\
      extern equal\n\
      extern ?try_gc\n\
      extern ?naive_print_heap\n\
@@ -2061,31 +2048,31 @@ let compile_prog (anfed, (env : arg name_envt tag_envt)) =
        ?err_num_to_string_not_num:%s\n\
        ?err_from_str_not_str:%s\n\
        ?err_from_str_invalid:%s\n"
-      (to_asm (native_call (Label "?error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_IF_NOT_BOOL; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_OVERFLOW; Reg RAX]))
-      (to_asm (native_call (Label "?error") [Const err_GET_NOT_TUPLE; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_GET_LOW_INDEX; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_GET_HIGH_INDEX; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_NIL_DEREF; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_OUT_OF_MEMORY; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SET_NOT_TUPLE; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SET_LOW_INDEX; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SET_HIGH_INDEX; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_CALL_NOT_CLOSURE; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_CALL_ARITY_ERR; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_GET_NOT_NUM; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SET_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_COMP_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_ARITH_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_LOGIC_NOT_BOOL; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_IF_NOT_BOOL; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_OVERFLOW; Reg RAX]))
+      (to_asm (native_call (Label "error") [Const err_GET_NOT_TUPLE; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_GET_LOW_INDEX; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_GET_HIGH_INDEX; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_NIL_DEREF; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_OUT_OF_MEMORY; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SET_NOT_TUPLE; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SET_LOW_INDEX; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SET_HIGH_INDEX; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_CALL_NOT_CLOSURE; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_CALL_ARITY_ERR; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_GET_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SET_NOT_NUM; Reg scratch_reg]))
       (to_asm
-         (native_call (Label "?error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
-      (to_asm (native_call (Label "?error") [Const err_CONCAT_NOT_SEQ; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_SEQ; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_SLICE_NOT_NUM; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_NUM_TO_STRING_NOT_NUM; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_FROM_STR_NOT_STR; Reg scratch_reg]))
-      (to_asm (native_call (Label "?error") [Const err_FROM_STR_INVALID; Reg scratch_reg]))
+         (native_call (Label "error") [Const err_TUPLE_DESTRUCTURE_MISMATCH; Reg scratch_reg]) )
+      (to_asm (native_call (Label "error") [Const err_CONCAT_NOT_SEQ; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SLICE_NOT_SEQ; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_SLICE_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_NUM_TO_STRING_NOT_NUM; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_FROM_STR_NOT_STR; Reg scratch_reg]))
+      (to_asm (native_call (Label "error") [Const err_FROM_STR_INVALID; Reg scratch_reg]))
   in
   match anfed with
   | AProgram (body, (_, tag)) ->
