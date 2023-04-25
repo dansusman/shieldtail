@@ -1,1 +1,1 @@
-(lambda (f): f())(input)
+let inputL = (lambda: input()) in inputL()

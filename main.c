@@ -9,11 +9,11 @@
 typedef uint64_t SNAKEVAL;
 
 extern SNAKEVAL our_code_starts_here(uint64_t *HEAP, uint64_t size) asm("?our_code_starts_here");
-extern void error() asm("?error");
+extern void error() asm("error");
 extern SNAKEVAL set_stack_bottom(uint64_t *stack_bottom) asm("?set_stack_bottom");
-extern SNAKEVAL print(SNAKEVAL val) asm("?print");
+extern SNAKEVAL print(SNAKEVAL val) asm("print");
 extern SNAKEVAL input() asm("input");
-extern SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("?print_stack");
+extern SNAKEVAL printStack(SNAKEVAL val, uint64_t *rsp, uint64_t *rbp, uint64_t args) asm("print_stack");
 extern SNAKEVAL equal(SNAKEVAL val1, SNAKEVAL val2) asm("equal");
 extern uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t amount_needed, uint64_t *first_frame, uint64_t *stack_top) asm("?try_gc");
 extern uint64_t *HEAP_END asm("?HEAP_END");
