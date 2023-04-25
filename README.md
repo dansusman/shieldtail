@@ -9,7 +9,7 @@ This repository holds the source code and test files for the SHIT snake language
 ## Features
 
 -   Strings and Comments
-    -   See [Our String Library](./string_lib/) for details
+    -   See [Our String Library](./strings/) for details
 -   Tuples (untyped)
 -   First-class, recursive lambdas
 -   I/O (`input()`, `print(val)`)
@@ -74,7 +74,7 @@ To view intermediate representations and state of the world through the various 
 
 ## Compiler Design Decisions
 
-For string specific design decisions, please read [DECISIONS.md](./string_lib/DECISIONS.md).
+For string specific design decisions, please read [DECISIONS.md](./strings/DECISIONS.md).
 
 ### Disclaimer
 
