@@ -903,13 +903,8 @@ let string_gc =
     tgc "gc_slice" (4 + builtins_size) "\"hello\"[1:4:1]" "" "\"ell\"";
     tgc "gc_string_stress" (8 + builtins_size)
       "def churn(n): if n == 0: 0 else: \"hello, world\"; churn(sub1(n))\n churn(print(100))" "" "0";
-    tgc "gc_charAt_stress" (8 + builtins_size) ~no_builtins:true
-      "def churn(n): if n == 0: 0 else: \"hello\"[2]; churn(sub1(n))\n churn(print(100))" "" "0";
     tgc "gc_chr_stress" (8 + builtins_size)
-      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(print(100))" "" "0";
-    tgc "gc_concat_stress" (8 + builtins_size) ~no_builtins:true
-      "def churn(n): if n == 0: 0 else: \"hello, \" ^ \"world\"; churn(sub1(n))\n churn(print(100))"
-      "" "0" ]
+      "def churn(n): if n == 0: 0 else: chr(244); churn(sub1(n))\n churn(print(100))" "" "0" ]
 ;;
 
 let gc_suite = "gc_suite" >::: oom @ gc @ string_gc

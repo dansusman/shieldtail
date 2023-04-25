@@ -45,7 +45,7 @@
     -   Parsing
     -   Well-formedness
     -   Desugaring (trivial)
-    -   Add native lambdas
+    -   Add native lambdas (trivial)
     -   Rename (trivial)
     -   ANF'ing (trivial)
     -   Free vars (trivial)
