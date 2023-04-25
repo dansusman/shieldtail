@@ -46,7 +46,7 @@ extern uint64_t ERR_FROM_STR_NOT_STR;
 extern uint64_t *HEAP_END asm("?HEAP_END");
 
 uint64_t *try_gc(uint64_t *alloc_ptr, uint64_t bytes_needed, uint64_t *cur_frame, uint64_t *cur_stack_top) asm("?try_gc");
-void error() asm("?error");
+void error() asm("error");
 
 SNAKEVAL get_length(SNAKEVAL val)
 {
